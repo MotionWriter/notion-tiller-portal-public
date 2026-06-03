@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PACKAGE="github:MotionWriter/notion-tiller-portal#main"
+BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh}"
+
+if [ -z "${BOOTSTRAP_REEXECED:-}" ] && [ ! -t 0 ] && [ -r /dev/tty ]; then
+	tmp_script="$(mktemp)"
+	curl -fsSL "$BOOTSTRAP_URL" > "$tmp_script"
+	chmod +x "$tmp_script"
+	BOOTSTRAP_REEXECED=1 exec bash "$tmp_script" "$@" < /dev/tty
+fi
+
+PACKAGE="github:MotionWriter/notion-tiller-portal-public#main"
 NTN_INSTALL_DIR="${NTN_INSTALL_DIR:-$HOME/.local/bin}"
 
 echo "Notion Tiller Portal bootstrap"
