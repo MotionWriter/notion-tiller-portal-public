@@ -614,18 +614,12 @@ async function submitCampaignRenderFromPage({
 			"Tiller Template ID": { number: template.tillerTemplateId },
 			"Tiller Work Order ID": { number: workOrderId },
 			"Render Count": { number: validation.includedRows.length },
-			"Parameter CSV": {
-				files: [{
-					type: "file_upload" as const,
-					name: csvFile.name,
-					file_upload: { id: csvUpload.id },
-				}],
-			},
 			"Submitted At": { date: { start: new Date().toISOString() } },
 			"Last Error": richTextValue(""),
 			"Last Synced At": { date: { start: new Date().toISOString() } },
 		},
 	});
+	await attachFileUploadToPage(notion, workOrderPage.id, "Parameter CSV", csvFile.name, csvUpload.id);
 	await notion.pages.update({
 		page_id: pageId,
 		properties: {
@@ -2989,13 +2983,6 @@ async function upsertRenderOutputRow({
 	const existing = await findRenderOutputRow(notion, dataSourceId, workOrderPageId, result.name);
 	const properties = {
 		Name: titleValue(`${summary.name || `Work Order ${summary.tillerWorkOrderId}`} - ${result.name}`),
-		"Output File": {
-			files: [{
-				type: "file_upload" as const,
-				name: result.name,
-				file_upload: { id: fileUploadId },
-			}],
-		},
 		Status: { select: { name: "Available" } },
 		"Work Order": relationValue(workOrderPageId),
 		...(campaignPageId ? { Campaign: relationValue(campaignPageId) } : {}),
@@ -3009,12 +2996,36 @@ async function upsertRenderOutputRow({
 		"Downloaded At": { date: { start: new Date().toISOString() } },
 		"Last Error": richTextValue(""),
 	};
+	let outputPage;
 	if (existing) {
-		return notion.pages.update({ page_id: existing.id, properties });
+		outputPage = await notion.pages.update({ page_id: existing.id, properties });
+	} else {
+		outputPage = await notion.pages.create({
+			parent: { type: "data_source_id", data_source_id: dataSourceId },
+			properties,
+		});
 	}
-	return notion.pages.create({
-		parent: { type: "data_source_id", data_source_id: dataSourceId },
-		properties,
+	return attachFileUploadToPage(notion, outputPage.id, "Output File", result.name, fileUploadId);
+}
+
+async function attachFileUploadToPage(
+	notion: any,
+	pageId: string,
+	propertyName: string,
+	filename: string,
+	fileUploadId: string,
+) {
+	return notion.pages.update({
+		page_id: pageId,
+		properties: {
+			[propertyName]: {
+				files: [{
+					type: "file_upload" as const,
+					name: filename,
+					file_upload: { id: fileUploadId },
+				}],
+			},
+		},
 	});
 }
 
