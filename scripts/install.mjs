@@ -26,6 +26,12 @@ const command = process.argv[2] ?? "install";
 const notionIntegrationUrl = "https://www.notion.so/profile/integrations/internal";
 const defaultPortalName = "Tiller Portal";
 const defaultDatabasePrefix = "Tiller";
+const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+const color = {
+	bold: (value) => useColor ? `\x1b[1m${value}\x1b[22m` : value,
+	cyan: (value) => useColor ? `\x1b[36m${value}\x1b[39m` : value,
+	dim: (value) => useColor ? `\x1b[2m${value}\x1b[22m` : value,
+};
 
 main().catch((error) => {
 	console.error(`\nInstall failed: ${error.message}`);
@@ -49,8 +55,8 @@ async function main() {
 		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", or "onboarding".`);
 	}
 
-	console.log("Notion Tiller Portal installer");
-	console.log("Daily render work happens in Notion. Terminal is only for setup.\n");
+	console.log(color.bold("Notion Tiller Portal installer"));
+	console.log(color.dim("Daily render work happens in Notion. Terminal is only for setup.\n"));
 
 	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
 	checkVersion("npm", ["--version"], 10, "npm 10.9.2 or newer is required.");
@@ -65,27 +71,27 @@ async function main() {
 	}
 
 	const rl = createPrompt();
-	console.log("Step 1 of 5: Setup page");
-	console.log("- Create one blank Notion page.");
-	console.log("- Copy that page URL.");
-	console.log("- The installer will build the portal under that page.\n");
+	printSection("Step 1 of 5", "Setup page");
+	printInfo("Create one blank Notion page.");
+	printInfo("Copy that page URL.");
+	printInfo("The installer will build the portal under that page.\n");
 	const parentPageId = await ask(rl, "Setup page URL or ID: ");
 
-	console.log("\nStep 2 of 5: Notion integration token");
+	printSection("Step 2 of 5", "Notion integration token");
 	await printNotionTokenHelp();
 	const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
 
-	console.log("\nStep 3 of 5: Portal names");
+	printSection("Step 3 of 5", "Portal names");
 	const portalName = await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
-	console.log("Database prefix example: Acme creates Acme Campaigns, Acme Work Orders, etc.");
+	printInfo("Database prefix example: Acme creates Acme Campaigns, Acme Work Orders, etc.");
 	const databasePrefix = await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
 
-	console.log("\nStep 4 of 5: Tiller login");
-	console.log("Tiller credentials are stored on the Notion Worker, not in Notion pages.\n");
+	printSection("Step 4 of 5", "Tiller login");
+	printInfo("Tiller credentials are stored on the Notion Worker, not in Notion pages.\n");
 	const tillerEmail = await ask(rl, "Tiller email: ");
 	const tillerPassword = await askHidden(rl, "Tiller password: ");
 
-	console.log("\nStep 5 of 5: Save Worker secrets");
+	printSection("Step 5 of 5", "Save Worker secrets");
 	await printSecretCommandWarning();
 	const allowArgSecret = await ask(rl, "Continue setting Worker secrets? [y/N] ");
 	rl.close();
@@ -560,19 +566,27 @@ function createPrompt() {
 	return rl;
 }
 
+function printSection(step, title) {
+	console.log(`\n${color.cyan(color.bold(`== ${step}: ${title} ==`))}`);
+}
+
+function printInfo(message) {
+	console.log(color.dim(`- ${message}`));
+}
+
 async function printNotionTokenHelp() {
 	console.log("");
-	console.log(`Get your Notion integration token here: ${notionIntegrationUrl}`);
-	console.log("Open your internal integration, copy the Integration token, and make sure the target page is shared with it.\n");
+	console.log(color.dim(`Open: ${notionIntegrationUrl}`));
+	console.log(color.dim("Create or open an internal integration, copy the Integration token, and share the setup page with it.\n"));
 	await sleep(1500);
 }
 
 async function printSecretCommandWarning() {
 	console.log("");
-	console.log("Security note:");
-	console.log("The Notion CLI currently sets Worker environment values through command arguments.");
-	console.log("That means secrets can briefly appear in your shell history or local process list while they are being saved.");
-	console.log("They are not stored in Notion pages or in this installer state.\n");
+	console.log(color.bold("Security note:"));
+	console.log(color.dim("The Notion CLI currently sets Worker environment values through command arguments."));
+	console.log(color.dim("Secrets can briefly appear in your shell history or local process list while they are being saved."));
+	console.log(color.dim("They are not stored in Notion pages or in this installer state.\n"));
 	await sleep(1800);
 }
 
