@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PACKAGE="github:MotionWriter/notion-tiller-portal-public#main"
+PACKAGE="github:MotionWriter/notion-tiller-portal#main"
 NTN_INSTALL_DIR="${NTN_INSTALL_DIR:-$HOME/.local/bin}"
 
 echo "Notion Tiller Portal bootstrap"
@@ -70,6 +70,7 @@ echo
 echo "Checking Notion CLI login..."
 if ! ntn api v1/users/me >/dev/null 2>&1; then
 	ntn login
+	ntn login poll
 fi
 
 echo
