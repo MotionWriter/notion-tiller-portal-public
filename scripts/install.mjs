@@ -42,7 +42,7 @@ async function main() {
 		return;
 	}
 	if (command === "onboarding") {
-		runOnboarding();
+		await runOnboarding();
 		return;
 	}
 	if (command !== "install") {
@@ -320,28 +320,30 @@ async function updateCredentials() {
 	console.log("notion-tiller-portal doctor");
 }
 
-function runOnboarding() {
-	console.log("Notion Tiller Portal onboarding\n");
-	console.log("You only need Terminal for setup. Daily render work happens in Notion.\n");
-	console.log("Before install:");
-	console.log("1. Create one Notion setup checklist page.");
-	console.log("2. Create a Notion internal integration token:");
-	console.log(`   ${notionIntegrationUrl}`);
-	console.log("3. Share the setup checklist page with that integration.");
-	console.log("4. Make sure Notion Workers are enabled in workspace settings.");
-	console.log("5. Have your Tiller email and password ready.\n");
-	console.log("Fast setup command:");
-	console.log("curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash\n");
-	console.log("Manual install command:");
-	console.log("npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal install\n");
-	console.log("After install:");
-	console.log("1. Store webhook URLs in Settings when prompted.");
-	console.log("2. Add Notion automations for Template, Work Order, and Campaign Action fields.");
-	console.log("3. Run doctor:");
-	console.log("notion-tiller-portal doctor\n");
-	console.log("Use focused Notion views:");
-	console.log("- Add New Template");
-	console.log("- Start Workorder");
+async function runOnboarding() {
+	console.log("Notion Tiller Portal setup\n");
+	console.log("Daily render work happens in Notion. Terminal is only for setup.\n");
+
+	const rl = createPrompt();
+	console.log("Step 1 of 3: Notion setup page");
+	console.log("- Create one blank Notion page.");
+	console.log("- Copy that page URL.");
+	console.log("- The installer will build the portal under that page.\n");
+	await question(rl, "Press Enter when that page is ready.");
+
+	console.log("\nStep 2 of 3: Notion integration token");
+	console.log(`Open: ${notionIntegrationUrl}`);
+	console.log("- Create or open an internal integration.");
+	console.log("- Copy the integration token.");
+	console.log("- Share your setup page with that integration.\n");
+	await question(rl, "Press Enter when the token is ready.");
+
+	console.log("\nStep 3 of 3: Tiller login");
+	console.log("- Have your Tiller email ready.");
+	console.log("- Have your Tiller password ready.");
+	console.log("- These will be stored on the Notion Worker, not in Notion pages.\n");
+	await question(rl, "Press Enter to continue to installer.");
+	rl.close();
 }
 
 function runDoctor() {
