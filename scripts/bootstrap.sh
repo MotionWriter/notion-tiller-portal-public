@@ -69,7 +69,7 @@ echo "ntn: $(ntn --version)"
 echo
 echo "Checking Notion CLI login..."
 if ! ntn api v1/users/me >/dev/null 2>&1; then
-	ntn login
+	ntn login || true
 	ntn login poll
 fi
 
