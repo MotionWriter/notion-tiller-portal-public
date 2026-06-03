@@ -89,13 +89,4 @@ if ! ntn api v1/users/me >/dev/null 2>&1; then
 fi
 
 echo
-npm exec --yes --package="$PACKAGE" -- notion-tiller-portal onboarding
-
-echo
-read -r -p "Start installer now? [Y/n] " START_INSTALL
-if [[ "$START_INSTALL" =~ ^[Nn] ]]; then
-	echo "Stopped before install. Rerun this script when ready."
-	exit 0
-fi
-
 npm exec --yes --package="$PACKAGE" -- notion-tiller-portal install

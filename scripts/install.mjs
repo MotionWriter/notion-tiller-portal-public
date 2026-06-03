@@ -50,7 +50,7 @@ async function main() {
 	}
 
 	console.log("Notion Tiller Portal installer");
-	console.log("Tiller password and Notion API token stay in Worker env. They are not stored in Notion or local state.\n");
+	console.log("Daily render work happens in Notion. Terminal is only for setup.\n");
 
 	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
 	checkVersion("npm", ["--version"], 10, "npm 10.9.2 or newer is required.");
@@ -65,14 +65,27 @@ async function main() {
 	}
 
 	const rl = createPrompt();
-	const parentPageId = await ask(rl, "Setup checklist Notion page URL or ID: ");
+	console.log("Step 1 of 5: Setup page");
+	console.log("- Create one blank Notion page.");
+	console.log("- Copy that page URL.");
+	console.log("- The installer will build the portal under that page.\n");
+	const parentPageId = await ask(rl, "Setup page URL or ID: ");
+
+	console.log("\nStep 2 of 5: Portal names");
 	const portalName = await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
 	console.log("Database prefix example: Acme creates Acme Campaigns, Acme Work Orders, etc.");
 	const databasePrefix = await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
+
+	console.log("\nStep 3 of 5: Notion integration token");
 	await printNotionTokenHelp();
 	const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
+
+	console.log("\nStep 4 of 5: Tiller login");
+	console.log("Tiller credentials are stored on the Notion Worker, not in Notion pages.\n");
 	const tillerEmail = await ask(rl, "Tiller email: ");
 	const tillerPassword = await askHidden(rl, "Tiller password: ");
+
+	console.log("\nStep 5 of 5: Save Worker secrets");
 	await printSecretCommandWarning();
 	const allowArgSecret = await ask(rl, "Continue setting Worker secrets? [y/N] ");
 	rl.close();
@@ -103,7 +116,7 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	console.log(`Worker folder: ${workerDir}`);
 
 	const rl = createPrompt();
-	const parentPageId = state.parentPageId || await ask(rl, "Setup checklist Notion page URL or ID: ");
+	const parentPageId = state.parentPageId || await ask(rl, "Setup page URL or ID: ");
 	const portalName = state.portalName || defaultPortalName;
 	const databasePrefix = state.databasePrefix || defaultDatabasePrefix;
 	const updateToken = await ask(rl, "Update Notion internal integration token? [y/N] ");
