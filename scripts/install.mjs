@@ -1,0 +1,640 @@
+#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import {
+	cpSync,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { createInterface } from "node:readline";
+import { stdin as input, stdout as output } from "node:process";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(realpathSync(fileURLToPath(import.meta.url)));
+const repoRoot = path.resolve(__dirname, "..");
+const sourceWorkerDir = path.join(repoRoot, "tiller-agent-worker");
+const installRoot = path.join(os.homedir(), ".notion-tiller-portal");
+const workerDir = path.join(installRoot, "worker");
+const statePath = path.join(installRoot, "install-state.json");
+const command = process.argv[2] ?? "install";
+const notionIntegrationUrl = "https://www.notion.so/profile/integrations/internal";
+const defaultPortalName = "Tiller Portal";
+const defaultDatabasePrefix = "Tiller";
+
+main().catch((error) => {
+	console.error(`\nInstall failed: ${error.message}`);
+	process.exit(1);
+});
+
+async function main() {
+	if (command === "doctor") {
+		runDoctor();
+		return;
+	}
+	if (command === "credentials") {
+		await updateCredentials();
+		return;
+	}
+	if (command === "onboarding") {
+		runOnboarding();
+		return;
+	}
+	if (command !== "install") {
+		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", or "onboarding".`);
+	}
+
+	console.log("Notion Tiller Portal installer");
+	console.log("Tiller password and Notion API token stay in Worker env. They are not stored in Notion or local state.\n");
+
+	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
+	checkVersion("npm", ["--version"], 10, "npm 10.9.2 or newer is required.");
+	checkCommand("ntn", ["--version"], "Notion CLI missing. Install it first: curl -fsSL https://ntn.dev | NTN_INSTALL_DIR=\"$HOME/.local/bin\" bash");
+	ensureNotionLogin();
+
+	const existingState = readState();
+	const existingWorkersConfig = path.join(workerDir, "workers.json");
+	if (canResumeFromWorkerEnv(existingState, existingWorkersConfig)) {
+		await resumeFromWorkerEnv(existingState, existingWorkersConfig);
+		return;
+	}
+
+	const rl = createPrompt();
+	const parentPageId = await ask(rl, "Setup checklist Notion page URL or ID: ");
+	const portalName = await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
+	console.log("Database prefix example: Acme creates Acme Campaigns, Acme Work Orders, etc.");
+	const databasePrefix = await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
+	await printNotionTokenHelp();
+	const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
+	const tillerEmail = await ask(rl, "Tiller email: ");
+	const tillerPassword = await askHidden(rl, "Tiller password: ");
+	await printSecretCommandWarning();
+	const allowArgSecret = await ask(rl, "Continue setting Worker secrets? [y/N] ");
+	rl.close();
+	if (!/^y(es)?$/i.test(allowArgSecret.trim())) throw new Error("Stopped before setting secrets.");
+
+	run("ntn", ["doctor"], { allowFail: true });
+	await prepareWorkerDir();
+	writeState({ completedSteps: ["preflight"], parentPageId, portalName, databasePrefix });
+	run("npm", ["install"], { cwd: workerDir });
+	run("npm", ["run", "build"], { cwd: workerDir });
+	writeState({ completedSteps: ["preflight", "build"], parentPageId, portalName, databasePrefix });
+
+	run("ntn", ["workers", "deploy", "--no-git", "--name", "tiller-agent-worker"], { cwd: workerDir });
+	const workersConfig = path.join(workerDir, "workers.json");
+	const workerId = readWorkerId(workersConfig);
+	writeState({ completedSteps: ["preflight", "build", "deploy"], workerId, parentPageId, portalName, databasePrefix });
+
+	setWorkerEnv(workersConfig, "NOTION_API_TOKEN", notionApiToken);
+	setWorkerEnv(workersConfig, "TILLER_EMAIL", tillerEmail);
+	setWorkerEnv(workersConfig, "TILLER_PASSWORD", tillerPassword);
+	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env"], workerId, parentPageId, portalName, databasePrefix });
+
+	await finishInstall({ parentPageId, workerId, workersConfig, portalName, databasePrefix });
+}
+
+async function resumeFromWorkerEnv(state, workersConfig) {
+	console.log(`Resuming existing Worker ${state.workerId}.`);
+	console.log(`Worker folder: ${workerDir}`);
+
+	const rl = createPrompt();
+	const parentPageId = state.parentPageId || await ask(rl, "Setup checklist Notion page URL or ID: ");
+	const portalName = state.portalName || defaultPortalName;
+	const databasePrefix = state.databasePrefix || defaultDatabasePrefix;
+	const updateToken = await ask(rl, "Update Notion internal integration token? [y/N] ");
+	if (/^y(es)?$/i.test(updateToken.trim())) {
+		await printNotionTokenHelp();
+		const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
+		setWorkerEnv(workersConfig, "NOTION_API_TOKEN", notionApiToken);
+	}
+	rl.close();
+
+	await finishInstall({ parentPageId, workerId: state.workerId, workersConfig, portalName, databasePrefix });
+}
+
+async function finishInstall({ parentPageId, workerId, workersConfig, portalName, databasePrefix }) {
+	const setup = run("ntn", [
+		"workers",
+		"exec",
+		"setupWorkspace",
+		"-d",
+		JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: false })),
+		"--workers-config-file",
+		workersConfig,
+	], { cwd: workerDir, capture: true });
+	const setupJson = parseLastJson(setup.stdout);
+	const configDataSourceId = setupJson?.configDataSourceId;
+	if (!configDataSourceId) throw new Error("setupWorkspace did not return configDataSourceId.");
+	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
+
+	setWorkerEnv(workersConfig, "TILLER_PORTAL_CONFIG_DATA_SOURCE_ID", configDataSourceId);
+
+	run("ntn", [
+		"workers",
+		"exec",
+		"setupWorkspace",
+		"-d",
+		JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: false })),
+		"--workers-config-file",
+		workersConfig,
+	], { cwd: workerDir, allowFail: true });
+
+	run("ntn", [
+		"workers",
+		"exec",
+		"testTillerConnection",
+		"-d",
+		"{}",
+		"--workers-config-file",
+		workersConfig,
+	], { cwd: workerDir, allowFail: true });
+
+	const webhooks = run("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], {
+		cwd: workerDir,
+		capture: true,
+	});
+	const webhookUrls = parseWebhookUrls(webhooks.stdout);
+
+	const rl = createPrompt();
+	const storeWebhookInfo = await askYesNoDefault(
+		rl,
+		"Store these webhook URLs in the generated Settings page? [Y/n] ",
+		true,
+	);
+	rl.close();
+	if (storeWebhookInfo) {
+		run("ntn", [
+			"workers",
+			"exec",
+			"setupWorkspace",
+			"-d",
+			JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, writeSetupChecklist: true })),
+			"--workers-config-file",
+			workersConfig,
+		], { cwd: workerDir, allowFail: true });
+	} else {
+		run("ntn", [
+			"workers",
+			"exec",
+			"setupWorkspace",
+			"-d",
+			JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: true })),
+			"--workers-config-file",
+			workersConfig,
+		], { cwd: workerDir, allowFail: true });
+	}
+	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
+
+	console.log("\nInstall complete.");
+	console.log(`Portal page: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
+	console.log("\nWebhook URLs:");
+	console.log(webhooks.stdout.trim());
+	console.log("\nAdd Notion automations:");
+	console.log("- Tiller Templates: Action changes -> templateAction");
+	console.log("- Tiller Work Orders: Action changes -> workOrderAction");
+	console.log("- Tiller Campaigns: Action changes -> campaignAction");
+	console.log("- Cavalry script destination: cavalryWorkOrderStarted");
+	console.log("\nReminder: open Notion and update each database Action automation to use the matching webhook URL.");
+	console.log("Then run: notion-tiller-portal doctor");
+}
+
+function setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, writeSetupChecklist }) {
+	return {
+		parentPageId,
+		portalName: portalName || defaultPortalName,
+		databasePrefix: databasePrefix || defaultDatabasePrefix,
+		webhookUrls: webhookUrls
+			? {
+				templateAction: webhookUrls.templateAction ?? null,
+				workOrderAction: webhookUrls.workOrderAction ?? null,
+				campaignAction: webhookUrls.campaignAction ?? null,
+				cavalryWorkOrderStarted: webhookUrls.cavalryWorkOrderStarted ?? null,
+			}
+			: null,
+		writeSetupChecklist: writeSetupChecklist ?? null,
+	};
+}
+
+function parseWebhookUrls(value) {
+	const urls = {};
+	const names = ["templateAction", "workOrderAction", "campaignAction", "cavalryWorkOrderStarted"];
+	for (const name of names) {
+		const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const match = value.match(new RegExp(`(https://\\S+/${escaped})(?:\\s|$)`));
+		if (match?.[1]) urls[name] = match[1];
+	}
+	return urls;
+}
+
+function canResumeFromWorkerEnv(state, workersConfig) {
+	return Boolean(
+		state?.workerId &&
+		hasCompletedStep(state, "worker-env") &&
+		existsSync(workersConfig) &&
+		existsSync(path.join(workerDir, "package.json"))
+	);
+}
+
+async function updateCredentials() {
+	console.log("Notion Tiller Portal credentials\n");
+	console.log("Secrets are set on Worker env. They are not stored in Notion or local state.\n");
+	checkCommand("ntn", ["--version"], "Notion CLI missing.");
+	ensureNotionLogin();
+
+	const workersConfig = path.join(workerDir, "workers.json");
+	if (!existsSync(workersConfig)) {
+		throw new Error("No deployed Worker found. Run install first.");
+	}
+	const workerId = readWorkerId(workersConfig);
+	console.log(`Updating Worker ${workerId}.`);
+
+	const rl = createPrompt();
+	const updates = [];
+
+	if (await askYesNo(rl, "Update Notion internal integration token? [y/N] ")) {
+		await printNotionTokenHelp();
+		updates.push(["NOTION_API_TOKEN", await askHidden(rl, "Notion internal integration token: ")]);
+	}
+
+	const updateTiller = await askYesNo(rl, "Update Tiller email/password? [y/N] ");
+	if (updateTiller) {
+		updates.push(["TILLER_EMAIL", await ask(rl, "Tiller email: ")]);
+		updates.push(["TILLER_PASSWORD", await askHidden(rl, "Tiller password: ")]);
+	}
+
+	if (await askYesNo(rl, "Update Tiller API base URL? [y/N] ")) {
+		updates.push(["TILLER_API_BASE", await ask(rl, "Tiller API base URL: ")]);
+	}
+
+	if (await askYesNo(rl, "Update Google Drive API key? [y/N] ")) {
+		updates.push(["GOOGLE_DRIVE_API_KEY", await askHidden(rl, "Google Drive API key: ")]);
+	}
+
+	if (await askYesNo(rl, "Update Google Drive OAuth client/refresh token? [y/N] ")) {
+		updates.push(["GOOGLE_DRIVE_CLIENT_ID", await ask(rl, "Google Drive client ID: ")]);
+		updates.push(["GOOGLE_DRIVE_CLIENT_SECRET", await askHidden(rl, "Google Drive client secret: ")]);
+		updates.push(["GOOGLE_DRIVE_REFRESH_TOKEN", await askHidden(rl, "Google Drive refresh token: ")]);
+	}
+
+	if (await askYesNo(rl, "Update max Google Drive download bytes? [y/N] ")) {
+		updates.push(["MAX_DRIVE_DOWNLOAD_BYTES", await ask(rl, "Max bytes, e.g. 104857600: ")]);
+	}
+
+	if (await askYesNo(rl, "Update fallback campaign CSV columns? [y/N] ")) {
+		updates.push(["CAMPAIGN_CSV_COLUMNS", await ask(rl, "Comma-separated CSV columns: ")]);
+	}
+
+	if (updates.length === 0) {
+		rl.close();
+		console.log("No credential changes made.");
+		return;
+	}
+
+	await printSecretCommandWarning();
+	const confirm = await askYesNo(rl, "Apply these Worker env updates? [y/N] ");
+	rl.close();
+	if (!confirm) throw new Error("Stopped before setting credentials.");
+
+	for (const [name, value] of updates) {
+		setWorkerEnv(workersConfig, name, value);
+	}
+
+	if (updateTiller || updates.some(([name]) => name === "TILLER_API_BASE")) {
+		run("ntn", [
+			"workers",
+			"exec",
+			"testTillerConnection",
+			"-d",
+			"{}",
+			"--workers-config-file",
+			workersConfig,
+		], { cwd: workerDir, allowFail: true });
+	}
+
+	console.log("\nCredentials updated. Run doctor to verify:");
+	console.log("notion-tiller-portal doctor");
+}
+
+function runOnboarding() {
+	console.log("Notion Tiller Portal onboarding\n");
+	console.log("You only need Terminal for setup. Daily render work happens in Notion.\n");
+	console.log("Before install:");
+	console.log("1. Create one Notion setup checklist page.");
+	console.log("2. Create a Notion internal integration token:");
+	console.log(`   ${notionIntegrationUrl}`);
+	console.log("3. Share the setup checklist page with that integration.");
+	console.log("4. Make sure Notion Workers are enabled in workspace settings.");
+	console.log("5. Have your Tiller email and password ready.\n");
+	console.log("Fast setup command:");
+	console.log("curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash\n");
+	console.log("Manual install command:");
+	console.log("npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal install\n");
+	console.log("After install:");
+	console.log("1. Store webhook URLs in Settings when prompted.");
+	console.log("2. Add Notion automations for Template, Work Order, and Campaign Action fields.");
+	console.log("3. Run doctor:");
+	console.log("notion-tiller-portal doctor\n");
+	console.log("Use focused Notion views:");
+	console.log("- Add New Template");
+	console.log("- Start Workorder");
+}
+
+function runDoctor() {
+	console.log("Notion Tiller Portal doctor\n");
+	const issues = [];
+	checkDoctorVersion("node", ["--version"], 22, "Install Node 22 or newer.", issues);
+	checkDoctorVersion("npm", ["--version"], 10, "Install npm 10.9.2 or newer.", issues);
+	checkDoctorCommand("ntn", ["--version"], "Install Notion CLI: curl -fsSL https://ntn.dev | NTN_INSTALL_DIR=\"$HOME/.local/bin\" bash", issues);
+
+	const auth = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });
+	const authOk = auth.status === 0;
+	printCheck("ntn auth", authOk, authOk ? "ok" : "Run `ntn login`.");
+	if (!authOk) issues.push("Run `ntn login`.");
+
+	const state = readState();
+	printCheck("install state", existsSync(statePath), existsSync(statePath) ? statePath : "Run installer.");
+	if (!existsSync(statePath)) issues.push("Run installer.");
+
+	if (existsSync(statePath)) {
+		console.log(`completed: ${(state.completedSteps ?? []).join(", ") || "none"}`);
+		if (state.workerId) console.log(`workerId: ${state.workerId}`);
+		if (state.portalPageId) console.log(`portalPageId: ${state.portalPageId}`);
+		if (state.configDataSourceId) console.log(`configDataSourceId: ${state.configDataSourceId}`);
+	}
+
+	const workersConfig = path.join(workerDir, "workers.json");
+	printCheck("worker folder", existsSync(workerDir), workerDir);
+	if (!existsSync(workerDir)) issues.push("Run installer to create local worker folder.");
+	printCheck("workers.json", existsSync(workersConfig), workersConfig);
+	if (!existsSync(workersConfig)) issues.push("Run installer to deploy Worker.");
+	printCheck("worker package", existsSync(path.join(workerDir, "package.json")), path.join(workerDir, "package.json"));
+	if (!existsSync(path.join(workerDir, "package.json"))) issues.push("Run installer to prepare Worker source.");
+
+	if (existsSync(workersConfig) && authOk) {
+		const workerId = readWorkerId(workersConfig);
+		printCheck("worker id", Boolean(workerId), workerId || "Missing workerId.");
+
+		const configOk = Boolean(state.configDataSourceId && hasCompletedStep(state, "config-env"));
+		printCheck("config env", configOk, configOk ? state.configDataSourceId : "Run install resume to set TILLER_PORTAL_CONFIG_DATA_SOURCE_ID.");
+		if (!configOk) issues.push("Run installer again to finish setup/config env.");
+
+		const tiller = run("ntn", [
+			"workers",
+			"exec",
+			"testTillerConnection",
+			"-d",
+			"{}",
+			"--workers-config-file",
+			workersConfig,
+		], { cwd: workerDir, capture: true, allowFail: true, quiet: true });
+		const tillerJson = parseLastJson(tiller.stdout);
+		const tillerOk = tiller.status === 0 && tillerJson?.ok === true;
+		printCheck("Tiller auth", tillerOk, tillerOk ? "ok" : "Update Tiller credentials.");
+		if (!tillerOk) issues.push("Update Tiller credentials and rerun doctor.");
+
+		const webhooks = run("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], {
+			cwd: workerDir,
+			capture: true,
+			allowFail: true,
+			quiet: true,
+		});
+		const webhookNames = ["templateAction", "workOrderAction", "campaignAction", "cavalryWorkOrderStarted"];
+		const missingWebhooks = webhookNames.filter((name) => !webhooks.stdout.includes(name));
+		printCheck("webhooks", missingWebhooks.length === 0, missingWebhooks.length === 0 ? "all present" : `Missing: ${missingWebhooks.join(", ")}`);
+		if (missingWebhooks.length > 0) issues.push("Redeploy Worker or inspect webhook list.");
+	} else if (existsSync(workersConfig)) {
+		console.log("SKIP Worker remote checks: Notion CLI auth missing.");
+	}
+
+	console.log("\nManual Notion automation check:");
+	console.log("- Templates Action -> templateAction webhook");
+	console.log("- Work Orders Action -> workOrderAction webhook");
+	console.log("- Campaigns Action -> campaignAction webhook");
+
+	if (issues.length === 0) {
+		console.log("\nEverything basic looks ready.");
+		return;
+	}
+
+	console.log("\nMissing / needs attention:");
+	for (const issue of [...new Set(issues)]) console.log(`- ${issue}`);
+}
+
+function prepareWorkerDir() {
+	if (!existsSync(path.join(sourceWorkerDir, "package.json"))) {
+		throw new Error(`Worker source not found at ${sourceWorkerDir}. Reinstall package and try again.`);
+	}
+
+	console.log(`worker source: ${sourceWorkerDir}`);
+	console.log(`worker install: ${workerDir}`);
+	mkdirSync(installRoot, { recursive: true });
+	rmSync(workerDir, { recursive: true, force: true });
+	mkdirSync(workerDir, { recursive: true });
+	const skip = new Set(["node_modules", "dist", "workers.json"]);
+	for (const entry of readdirSync(sourceWorkerDir)) {
+		if (skip.has(entry)) continue;
+		cpSync(path.join(sourceWorkerDir, entry), path.join(workerDir, entry), {
+			recursive: true,
+			filter: (source) => !path.relative(sourceWorkerDir, source).split(path.sep).includes("node_modules"),
+		});
+	}
+	assertWorkerPackage();
+}
+
+function assertWorkerPackage() {
+	const packagePath = path.join(workerDir, "package.json");
+	if (!existsSync(packagePath)) throw new Error("Worker package.json was not copied.");
+	const parsed = JSON.parse(readFileSync(packagePath, "utf8"));
+	if (!parsed.scripts?.build) {
+		throw new Error(`Worker package.json missing build script. Copied wrong package into ${workerDir}.`);
+	}
+}
+
+function checkCommand(command, args, message) {
+	const result = spawnSync(command, args, { encoding: "utf8" });
+	if (result.status !== 0) throw new Error(message ?? `${command} check failed.`);
+	console.log(`${command}: ${result.stdout.trim() || "ok"}`);
+}
+
+function setWorkerEnv(workersConfig, name, value) {
+	run("ntn", ["workers", "env", "set", `${name}=${value}`, "--workers-config-file", workersConfig], {
+		cwd: workerDir,
+		label: `ntn workers env set ${name}=<redacted> --workers-config-file ${workersConfig}`,
+	});
+}
+
+function checkVersion(command, args, minimumMajor, message) {
+	const result = spawnSync(command, args, { encoding: "utf8" });
+	if (result.status !== 0) throw new Error(message);
+	const raw = result.stdout.trim();
+	const major = Number((raw.match(/\d+/) ?? [])[0]);
+	if (!Number.isFinite(major) || major < minimumMajor) throw new Error(`${message} Found ${raw}.`);
+	console.log(`${command}: ${raw}`);
+}
+
+function checkDoctorCommand(command, args, issue, issues) {
+	const result = spawnSync(command, args, { encoding: "utf8" });
+	const ok = result.status === 0;
+	printCheck(command, ok, ok ? result.stdout.trim() || "ok" : issue);
+	if (!ok) issues.push(issue);
+}
+
+function checkDoctorVersion(command, args, minimumMajor, issue, issues) {
+	const result = spawnSync(command, args, { encoding: "utf8" });
+	const raw = result.stdout.trim();
+	const major = Number((raw.match(/\d+/) ?? [])[0]);
+	const ok = result.status === 0 && Number.isFinite(major) && major >= minimumMajor;
+	printCheck(command, ok, ok ? raw : `${issue}${raw ? ` Found ${raw}.` : ""}`);
+	if (!ok) issues.push(issue);
+}
+
+function printCheck(label, ok, detail) {
+	console.log(`${ok ? "OK" : "MISSING"} ${label}: ${detail}`);
+}
+
+function ensureNotionLogin() {
+	const me = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });
+	if (me.status === 0) {
+		console.log("ntn auth: ok");
+		return;
+	}
+
+	console.log("ntn auth: login required");
+	run("ntn", ["login"]);
+	const verified = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });
+	if (verified.status !== 0) {
+		throw new Error("Notion CLI login did not complete. Run `ntn doctor` for details.");
+	}
+	console.log("ntn auth: ok");
+}
+
+function run(command, args, options = {}) {
+	const result = spawnSync(command, args, {
+		cwd: options.cwd,
+		encoding: "utf8",
+		stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
+	});
+	if (options.capture && !options.quiet && result.stdout) process.stdout.write(result.stdout);
+	if (options.capture && !options.quiet && result.stderr) process.stderr.write(result.stderr);
+	if (result.status !== 0 && !options.allowFail) {
+		throw new Error(`${options.label ?? `${command} ${args.join(" ")}`} failed.`);
+	}
+	return result;
+}
+
+function createPrompt() {
+	const rl = createInterface({ input, output });
+	rl.stdoutMuted = false;
+	const originalWrite = rl._writeToOutput.bind(rl);
+	rl._writeToOutput = (value) => {
+		if (!rl.stdoutMuted) {
+			originalWrite(value);
+			return;
+		}
+		if (value.endsWith(": ")) {
+			originalWrite(value);
+			return;
+		}
+		originalWrite("*");
+	};
+	return rl;
+}
+
+async function printNotionTokenHelp() {
+	console.log("");
+	console.log(`Get your Notion integration token here: ${notionIntegrationUrl}`);
+	console.log("Open your internal integration, copy the Integration token, and make sure the target page is shared with it.\n");
+	await sleep(1500);
+}
+
+async function printSecretCommandWarning() {
+	console.log("");
+	console.log("Security note:");
+	console.log("The Notion CLI currently sets Worker environment values through command arguments.");
+	console.log("That means secrets can briefly appear in your shell history or local process list while they are being saved.");
+	console.log("They are not stored in Notion pages or in this installer state.\n");
+	await sleep(1800);
+}
+
+async function ask(rl, prompt) {
+	const value = await question(rl, prompt);
+	if (!value.trim()) throw new Error("Required input missing.");
+	return value.trim();
+}
+
+async function askOptional(rl, prompt, fallback) {
+	const value = await question(rl, prompt);
+	return value.trim() || fallback;
+}
+
+async function askYesNo(rl, prompt) {
+	const value = await question(rl, prompt);
+	return /^y(es)?$/i.test(value.trim());
+}
+
+async function askYesNoDefault(rl, prompt, fallback) {
+	const value = await question(rl, prompt);
+	if (!value.trim()) return fallback;
+	return /^y(es)?$/i.test(value.trim());
+}
+
+async function askHidden(rl, prompt) {
+	rl.stdoutMuted = true;
+	const value = await question(rl, prompt);
+	rl.stdoutMuted = false;
+	output.write("\n");
+	if (!value.trim()) throw new Error(`${prompt.replace(/:\s*$/, "")} missing.`);
+	return value;
+}
+
+function question(rl, prompt) {
+	return new Promise((resolve) => rl.question(prompt, resolve));
+}
+
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readWorkerId(workersConfig) {
+	if (!existsSync(workersConfig)) throw new Error("workers.json was not created after deploy.");
+	const parsed = JSON.parse(readFileSync(workersConfig, "utf8"));
+	if (!parsed.workerId) throw new Error("workers.json is missing workerId.");
+	return parsed.workerId;
+}
+
+function parseLastJson(value) {
+	const trimmed = value.trim();
+	for (let index = trimmed.lastIndexOf("{"); index >= 0; index = trimmed.lastIndexOf("{", index - 1)) {
+		try {
+			return JSON.parse(trimmed.slice(index));
+		} catch {
+			// Keep scanning backward until final complete JSON object is found.
+		}
+	}
+	return null;
+}
+
+function readState() {
+	if (!existsSync(statePath)) return {};
+	try {
+		return JSON.parse(readFileSync(statePath, "utf8"));
+	} catch {
+		return {};
+	}
+}
+
+function hasCompletedStep(state, step) {
+	return Array.isArray(state.completedSteps) && state.completedSteps.includes(step);
+}
+
+function writeState(state) {
+	const previous = readState();
+	writeFileSync(statePath, `${JSON.stringify({ ...previous, ...state, updatedAt: new Date().toISOString() }, null, 2)}\n`, {
+		mode: 0o600,
+	});
+}
