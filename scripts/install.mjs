@@ -31,6 +31,7 @@ const color = {
 	bold: (value) => useColor ? `\x1b[1m${value}\x1b[22m` : value,
 	cyan: (value) => useColor ? `\x1b[36m${value}\x1b[39m` : value,
 	dim: (value) => useColor ? `\x1b[2m${value}\x1b[22m` : value,
+	yellow: (value) => useColor ? `\x1b[33m${value}\x1b[39m` : value,
 };
 
 main().catch((error) => {
@@ -93,7 +94,7 @@ async function main() {
 
 	printSection("Step 5 of 5", "Save Worker secrets");
 	await printSecretCommandWarning();
-	const allowArgSecret = await ask(rl, "Continue setting Worker secrets? [y/N] ");
+	const allowArgSecret = await askAction(rl, "Continue setting Worker secrets? [y/N] ");
 	rl.close();
 	if (!/^y(es)?$/i.test(allowArgSecret.trim())) throw new Error("Stopped before setting secrets.");
 
@@ -178,9 +179,11 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		message: "Getting Worker webhook URLs",
 	});
 	const webhookUrls = parseWebhookUrls(webhooks.stdout);
+	const foundWebhookNames = Object.keys(webhookUrls);
+	printInfo(`Found ${foundWebhookNames.length} Worker webhook URL${foundWebhookNames.length === 1 ? "" : "s"}: ${foundWebhookNames.join(", ") || "none"}.`);
 
 	const rl = createPrompt();
-	const storeWebhookInfo = await askYesNoDefault(
+	const storeWebhookInfo = await askActionYesNoDefault(
 		rl,
 		"Store these webhook URLs in the generated Settings page? [Y/n] ",
 		true,
@@ -212,7 +215,7 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 	console.log("\nInstall complete.");
 	console.log(`Portal page: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
 	console.log("\nWebhook URLs:");
-	console.log(webhooks.stdout.trim());
+	printWebhookUrls(webhookUrls);
 	console.log("\nAdd Notion automations:");
 	console.log("- Tiller Templates: Action changes -> templateAction");
 	console.log("- Tiller Work Orders: Action changes -> workOrderAction");
@@ -248,6 +251,13 @@ function parseWebhookUrls(value) {
 		if (match?.[1]) urls[name] = match[1];
 	}
 	return urls;
+}
+
+function printWebhookUrls(webhookUrls) {
+	const names = ["templateAction", "workOrderAction", "campaignAction", "cavalryWorkOrderStarted"];
+	for (const name of names) {
+		console.log(`- ${name}: ${webhookUrls[name] ?? "not found"}`);
+	}
 }
 
 function canResumeFromWorkerEnv(state, workersConfig) {
@@ -646,6 +656,11 @@ async function ask(rl, prompt) {
 	return value.trim();
 }
 
+async function askAction(rl, prompt) {
+	printActionNeeded();
+	return ask(rl, prompt);
+}
+
 async function askOptional(rl, prompt, fallback) {
 	const value = await question(rl, prompt);
 	return value.trim() || fallback;
@@ -662,6 +677,11 @@ async function askYesNoDefault(rl, prompt, fallback) {
 	return /^y(es)?$/i.test(value.trim());
 }
 
+async function askActionYesNoDefault(rl, prompt, fallback) {
+	printActionNeeded();
+	return askYesNoDefault(rl, prompt, fallback);
+}
+
 async function askHidden(rl, prompt) {
 	rl.stdoutMuted = true;
 	const value = await question(rl, prompt);
@@ -673,6 +693,11 @@ async function askHidden(rl, prompt) {
 
 function question(rl, prompt) {
 	return new Promise((resolve) => rl.question(prompt, resolve));
+}
+
+function printActionNeeded() {
+	console.log(`\n${color.yellow(color.bold(">>> ACTION NEEDED <<<"))}`);
+	console.log(color.dim("Type your answer, then press Enter."));
 }
 
 function sleep(ms) {
