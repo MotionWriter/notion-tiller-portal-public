@@ -79,7 +79,13 @@ echo
 echo "Checking Notion CLI login..."
 if ! ntn api v1/users/me >/dev/null 2>&1; then
 	ntn login || true
-	ntn login poll
+	echo
+	echo "After confirming in the browser, run:"
+	echo "  ntn login poll"
+	echo
+	echo "Then rerun this bootstrap command:"
+	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
+	exit 0
 fi
 
 echo

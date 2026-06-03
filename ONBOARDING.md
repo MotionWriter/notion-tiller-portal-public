@@ -58,7 +58,7 @@ The installer also prints this link when it asks for the token.
 In Terminal, run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal/main/scripts/bootstrap.sh | bash
 ```
 
 What they should see:
@@ -68,6 +68,18 @@ What they should see:
 - Notion CLI login if needed
 - Short onboarding text
 - Prompt to start the installer
+
+If Notion CLI login is needed, the bootstrap stops after printing a browser login URL. After confirming in the browser, run:
+
+```sh
+ntn login poll
+```
+
+Then rerun:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
+```
 
 If Node is missing, install Node using the command it prints, then rerun bootstrap.
 
@@ -133,7 +145,7 @@ For each `Send webhook` action:
 Run:
 
 ```sh
-npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal doctor
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal#main -- notion-tiller-portal doctor
 ```
 
 Doctor checks:
@@ -169,13 +181,13 @@ Point out:
 Change credentials:
 
 ```sh
-npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal#main -- notion-tiller-portal credentials
 ```
 
 Reprint onboarding:
 
 ```sh
-npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal onboarding
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal#main -- notion-tiller-portal onboarding
 ```
 
 ## Common Issues
