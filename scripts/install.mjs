@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
 	cpSync,
 	existsSync,
@@ -137,7 +137,7 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 }
 
 async function finishInstall({ parentPageId, workerId, workersConfig, portalName, databasePrefix }) {
-	const setup = run("ntn", [
+	const setup = await runWithSpinner("ntn", [
 		"workers",
 		"exec",
 		"setupWorkspace",
@@ -145,7 +145,7 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: false })),
 		"--workers-config-file",
 		workersConfig,
-	], { cwd: workerDir, capture: true });
+	], { cwd: workerDir, message: "Creating Notion portal and databases" });
 	const setupJson = parseLastJson(setup.stdout);
 	const configDataSourceId = setupJson?.configDataSourceId;
 	if (!configDataSourceId) throw new Error("setupWorkspace did not return configDataSourceId.");
@@ -153,7 +153,7 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 
 	setWorkerEnv(workersConfig, "TILLER_PORTAL_CONFIG_DATA_SOURCE_ID", configDataSourceId);
 
-	run("ntn", [
+	await runWithSpinner("ntn", [
 		"workers",
 		"exec",
 		"setupWorkspace",
@@ -161,9 +161,9 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: false })),
 		"--workers-config-file",
 		workersConfig,
-	], { cwd: workerDir, allowFail: true });
+	], { cwd: workerDir, allowFail: true, message: "Saving portal configuration" });
 
-	run("ntn", [
+	await runWithSpinner("ntn", [
 		"workers",
 		"exec",
 		"testTillerConnection",
@@ -171,11 +171,11 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		"{}",
 		"--workers-config-file",
 		workersConfig,
-	], { cwd: workerDir, allowFail: true });
+	], { cwd: workerDir, allowFail: true, message: "Testing Tiller connection" });
 
-	const webhooks = run("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], {
+	const webhooks = await runWithSpinner("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], {
 		cwd: workerDir,
-		capture: true,
+		message: "Getting Worker webhook URLs",
 	});
 	const webhookUrls = parseWebhookUrls(webhooks.stdout);
 
@@ -187,7 +187,7 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 	);
 	rl.close();
 	if (storeWebhookInfo) {
-		run("ntn", [
+		await runWithSpinner("ntn", [
 			"workers",
 			"exec",
 			"setupWorkspace",
@@ -195,9 +195,9 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 			JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, writeSetupChecklist: true })),
 			"--workers-config-file",
 			workersConfig,
-		], { cwd: workerDir, allowFail: true });
+		], { cwd: workerDir, allowFail: true, message: "Writing webhooks to Settings page" });
 	} else {
-		run("ntn", [
+		await runWithSpinner("ntn", [
 			"workers",
 			"exec",
 			"setupWorkspace",
@@ -205,7 +205,7 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 			JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: true })),
 			"--workers-config-file",
 			workersConfig,
-		], { cwd: workerDir, allowFail: true });
+		], { cwd: workerDir, allowFail: true, message: "Writing setup checklist" });
 	}
 	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
 
@@ -546,6 +546,56 @@ function run(command, args, options = {}) {
 		throw new Error(`${options.label ?? `${command} ${args.join(" ")}`} failed.`);
 	}
 	return result;
+}
+
+function runWithSpinner(command, args, options = {}) {
+	const message = options.message ?? `${command} ${args[0] ?? ""}`.trim();
+	const frames = ["|", "/", "-", "\\"];
+	let frameIndex = 0;
+	let timer = null;
+
+	if (process.stdout.isTTY) {
+		process.stdout.write(`${color.cyan(frames[frameIndex])} ${message}...`);
+		timer = setInterval(() => {
+			frameIndex = (frameIndex + 1) % frames.length;
+			process.stdout.write(`\r${color.cyan(frames[frameIndex])} ${message}...`);
+		}, 120);
+	} else {
+		console.log(`${message}...`);
+	}
+
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			cwd: options.cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stdout = "";
+		let stderr = "";
+		child.stdout.on("data", (chunk) => {
+			stdout += chunk.toString();
+		});
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk.toString();
+		});
+		child.on("error", (error) => {
+			if (timer) clearInterval(timer);
+			if (process.stdout.isTTY) process.stdout.write(`\r${color.bold("FAIL")} ${message}\n`);
+			reject(error);
+		});
+		child.on("close", (status) => {
+			if (timer) clearInterval(timer);
+			if (process.stdout.isTTY) {
+				process.stdout.write(`\r${status === 0 ? "OK" : "FAIL"} ${message}\n`);
+			} else {
+				console.log(`${status === 0 ? "done" : "failed"}: ${message}`);
+			}
+			if (status !== 0 && !options.allowFail) {
+				reject(new Error(`${options.label ?? `${command} ${args.join(" ")}`} failed.${stderr ? `\n${stderr.trim()}` : ""}`));
+				return;
+			}
+			resolve({ status, stdout, stderr });
+		});
+	});
 }
 
 function createPrompt() {
