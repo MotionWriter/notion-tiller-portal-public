@@ -71,14 +71,14 @@ async function main() {
 	console.log("- The installer will build the portal under that page.\n");
 	const parentPageId = await ask(rl, "Setup page URL or ID: ");
 
-	console.log("\nStep 2 of 5: Portal names");
+	console.log("\nStep 2 of 5: Notion integration token");
+	await printNotionTokenHelp();
+	const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
+
+	console.log("\nStep 3 of 5: Portal names");
 	const portalName = await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
 	console.log("Database prefix example: Acme creates Acme Campaigns, Acme Work Orders, etc.");
 	const databasePrefix = await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
-
-	console.log("\nStep 3 of 5: Notion integration token");
-	await printNotionTokenHelp();
-	const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
 
 	console.log("\nStep 4 of 5: Tiller login");
 	console.log("Tiller credentials are stored on the Notion Worker, not in Notion pages.\n");
