@@ -627,7 +627,7 @@ function createPrompt() {
 }
 
 function printSection(step, title) {
-	console.log(`\n${color.cyan(color.bold(`== ${step}: ${title} ==`))}`);
+	console.log(`\n${color.cyan(color.bold(`======= ${step}: ${title} =======`))}`);
 }
 
 function printInfo(message) {
@@ -697,7 +697,6 @@ function question(rl, prompt) {
 
 function printActionNeeded() {
 	console.log(`\n${color.yellow(color.bold(">>> ACTION NEEDED <<<"))}`);
-	console.log(color.dim("Type your answer, then press Enter."));
 }
 
 function sleep(ms) {
