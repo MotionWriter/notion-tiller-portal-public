@@ -611,6 +611,8 @@ async function submitCampaignRenderFromPage({
 			Name: titleValue(`${validation.campaign} Render Test`),
 			Action: { select: { name: "None" } },
 			[WORK_ORDER_STATUS_PROPERTY]: { select: { name: "Submit Requested" } },
+			Campaign: relationValue(pageId),
+			Template: relationValue(validation.templatePageId),
 			"Tiller Template ID": { number: template.tillerTemplateId },
 			"Tiller Work Order ID": { number: workOrderId },
 			"Render Count": { number: validation.includedRows.length },
