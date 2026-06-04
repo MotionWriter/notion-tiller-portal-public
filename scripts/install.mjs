@@ -26,6 +26,7 @@ const command = process.argv[2] ?? "install";
 const notionIntegrationUrl = "https://www.notion.so/profile/integrations/internal";
 const defaultPortalName = "Tiller Portal";
 const defaultDatabasePrefix = "Tiller";
+const cliCommand = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
 const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
 const color = {
 	bold: (value) => useColor ? `\x1b[1m${value}\x1b[22m` : value,
@@ -101,11 +102,14 @@ async function main() {
 	run("ntn", ["doctor"], { allowFail: true });
 	await prepareWorkerDir();
 	writeState({ completedSteps: ["preflight"], parentPageId, portalName, databasePrefix });
-	run("npm", ["install"], { cwd: workerDir });
-	run("npm", ["run", "build"], { cwd: workerDir });
+	await runWithSpinner("npm", ["install"], { cwd: workerDir, message: "Installing Worker dependencies" });
+	await runWithSpinner("npm", ["run", "build"], { cwd: workerDir, message: "Building Worker" });
 	writeState({ completedSteps: ["preflight", "build"], parentPageId, portalName, databasePrefix });
 
-	run("ntn", ["workers", "deploy", "--no-git", "--name", "tiller-agent-worker"], { cwd: workerDir });
+	await runWithSpinner("ntn", ["workers", "deploy", "--no-git", "--name", "tiller-agent-worker"], {
+		cwd: workerDir,
+		message: "Deploying Notion Worker",
+	});
 	const workersConfig = path.join(workerDir, "workers.json");
 	const workerId = readWorkerId(workersConfig);
 	writeState({ completedSteps: ["preflight", "build", "deploy"], workerId, parentPageId, portalName, databasePrefix });
@@ -212,17 +216,14 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 	}
 	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
 
-	console.log("\nInstall complete.");
-	console.log(`Portal page: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
+	printSection("Done", "Install complete");
+	console.log(`Portal page ID: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
 	console.log("\nWebhook URLs:");
 	printWebhookUrls(webhookUrls);
-	console.log("\nAdd Notion automations:");
-	console.log("- Tiller Templates: Action changes -> templateAction");
-	console.log("- Tiller Work Orders: Action changes -> workOrderAction");
-	console.log("- Tiller Campaigns: Action changes -> campaignAction");
-	console.log("- Cavalry script destination: cavalryWorkOrderStarted");
-	console.log("\nReminder: open Notion and update each database Action automation to use the matching webhook URL.");
-	console.log("Then run: notion-tiller-portal doctor");
+	console.log("\nNext:");
+	console.log("1. Open Settings in Notion.");
+	console.log("2. Add database automations using the stored webhook instructions.");
+	console.log(`3. Run: ${cliCommand} doctor`);
 }
 
 function setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, writeSetupChecklist }) {
@@ -346,7 +347,7 @@ async function updateCredentials() {
 	}
 
 	console.log("\nCredentials updated. Run doctor to verify:");
-	console.log("notion-tiller-portal doctor");
+	console.log(`${cliCommand} doctor`);
 }
 
 async function runOnboarding() {
@@ -354,23 +355,23 @@ async function runOnboarding() {
 	console.log("Daily render work happens in Notion. Terminal is only for setup.\n");
 
 	const rl = createPrompt();
-	console.log("Step 1 of 3: Notion setup page");
-	console.log("- Create one blank Notion page.");
-	console.log("- Copy that page URL.");
-	console.log("- The installer will build the portal under that page.\n");
+	printSection("Step 1 of 3", "Notion setup page");
+	printInfo("Create one blank Notion page.");
+	printInfo("Copy that page URL.");
+	printInfo("The installer will build the portal under that page.\n");
 	await question(rl, "Press Enter when that page is ready.");
 
-	console.log("\nStep 2 of 3: Notion integration token");
-	console.log(`Open: ${notionIntegrationUrl}`);
-	console.log("- Create or open an internal integration.");
-	console.log("- Copy the integration token.");
-	console.log("- Share your setup page with that integration.\n");
+	printSection("Step 2 of 3", "Notion integration token");
+	console.log(color.dim(`Open: ${notionIntegrationUrl}`));
+	printInfo("Create or open an internal integration.");
+	printInfo("Copy the integration token.");
+	printInfo("Share your setup page with that integration.\n");
 	await question(rl, "Press Enter when the token is ready.");
 
-	console.log("\nStep 3 of 3: Tiller login");
-	console.log("- Have your Tiller email ready.");
-	console.log("- Have your Tiller password ready.");
-	console.log("- These will be stored on the Notion Worker, not in Notion pages.\n");
+	printSection("Step 3 of 3", "Tiller login");
+	printInfo("Have your Tiller email ready.");
+	printInfo("Have your Tiller password ready.");
+	printInfo("These will be stored on the Notion Worker, not in Notion pages.\n");
 	await question(rl, "Press Enter to continue to installer.");
 	rl.close();
 }
@@ -461,8 +462,7 @@ function prepareWorkerDir() {
 		throw new Error(`Worker source not found at ${sourceWorkerDir}. Reinstall package and try again.`);
 	}
 
-	console.log(`worker source: ${sourceWorkerDir}`);
-	console.log(`worker install: ${workerDir}`);
+	printInfo(`Worker install folder: ${workerDir}`);
 	mkdirSync(installRoot, { recursive: true });
 	rmSync(workerDir, { recursive: true, force: true });
 	mkdirSync(workerDir, { recursive: true });
@@ -651,17 +651,18 @@ async function printSecretCommandWarning() {
 }
 
 async function ask(rl, prompt) {
+	printActionNeeded();
 	const value = await question(rl, prompt);
 	if (!value.trim()) throw new Error("Required input missing.");
 	return value.trim();
 }
 
 async function askAction(rl, prompt) {
-	printActionNeeded();
 	return ask(rl, prompt);
 }
 
 async function askOptional(rl, prompt, fallback) {
+	printActionNeeded();
 	const value = await question(rl, prompt);
 	return value.trim() || fallback;
 }
@@ -683,6 +684,7 @@ async function askActionYesNoDefault(rl, prompt, fallback) {
 }
 
 async function askHidden(rl, prompt) {
+	printActionNeeded();
 	rl.stdoutMuted = true;
 	const value = await question(rl, prompt);
 	rl.stdoutMuted = false;

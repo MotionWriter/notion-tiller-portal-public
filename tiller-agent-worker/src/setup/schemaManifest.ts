@@ -72,7 +72,7 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 		creatorFacing: true,
 		properties: [
 			{ name: "Name", type: "title" },
-			{ name: "Action", type: "select", options: ["None", "Add to Tiller", "Push Update", "Check Status"] },
+			{ name: "Action", type: "select", options: ["None", "Add to Tiller", "Push Update", "Check Status", "Sync Data Table"] },
 			{ name: "_Progress", type: "number" },
 			{ name: "_Milestone", type: "select", options: PROGRESS_MILESTONES },
 			{ name: "_Progress Note", type: "rich_text" },
@@ -82,6 +82,9 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 			{ name: "Tiller Template ID", type: "number" },
 			{ name: "Template Details", type: "rich_text" },
 			{ name: "CSV Columns", type: "rich_text" },
+			{ name: "Data Rows Database ID", type: "rich_text" },
+			{ name: "Data Rows Database URL", type: "url" },
+			{ name: "Data Rows Status", type: "select", options: ["Pending", "Ready", "Needs Sync", "Failed"] },
 			{ name: "Parameter File Path", type: "rich_text" },
 			{ name: "Smart Folder Parameters", type: "rich_text" },
 			{ name: "Required Assets", type: "rich_text" },

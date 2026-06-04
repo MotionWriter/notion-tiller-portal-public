@@ -48,6 +48,7 @@ type StarterViewSpec = {
 };
 
 const NOTION_VIEWS_API_VERSION = "2026-03-11";
+const CLI_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
 
 const STARTER_VIEWS: StarterViewSpec[] = [
 	{
@@ -103,7 +104,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Status", select: { does_not_equal: "Archived" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "_Progress Note", "Status", "Cav File", "Template Assets URL", "Tiller Template ID", "Tiller Response", "Last Error"],
+		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "_Progress Note", "Status", "Cav File", "Template Assets URL", "Tiller Template ID", "Data Rows Status", "Data Rows Database URL", "Tiller Response", "Last Error"],
 	},
 	{
 		key: "templates",
@@ -111,7 +112,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "gallery",
 		filter: { property: "Status", select: { equals: "Ready" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Status", "Tiller Template ID", "CSV Columns", "Parameter File Path", "Last Synced At"],
+		visibleProperties: ["Name", "Status", "Tiller Template ID", "CSV Columns", "Data Rows Status", "Data Rows Database URL", "Parameter File Path", "Last Synced At"],
 	},
 	{
 		key: "templates",
@@ -309,19 +310,26 @@ async function repairDatabaseProperties(
 	const existing = dataSource.properties ?? {};
 	const hasTitleProperty = Object.values(existing).some((property: any) => property?.type === "title");
 	const missing: Record<string, any> = {};
+	const selectUpdates: Record<string, any> = {};
 	for (const property of spec.properties) {
-		if (existing[property.name]) continue;
+		const existingProperty = existing[property.name];
+		if (existingProperty) {
+			const selectUpdate = selectOptionsForUpdate(existingProperty, property);
+			if (selectUpdate) selectUpdates[property.name] = selectUpdate;
+			continue;
+		}
 		if (property.type === "title" && hasTitleProperty) continue;
 		const request = propertyToRequest(property, refs);
 		if (!request) continue;
 		missing[property.name] = request;
 	}
-	if (Object.keys(missing).length === 0) return;
+	const properties = { ...missing, ...selectUpdates };
+	if (Object.keys(properties).length === 0) return;
 	await notion.dataSources.update({
 		data_source_id: dataSourceId,
-		properties: missing,
+		properties,
 	});
-	repaired.push(`properties:${databaseName}:${Object.keys(missing).join(", ")}`);
+	repaired.push(`properties:${databaseName}:${Object.keys(properties).join(", ")}`);
 }
 
 function displayDatabaseName(spec: DatabaseSpec, databasePrefix: string) {
@@ -506,6 +514,26 @@ function propertyToRequest(
 	return null;
 }
 
+function selectOptionsForUpdate(existingProperty: any, property: PropertySpec) {
+	if (property.type !== "select") return null;
+	const options = existingProperty?.select?.options;
+	if (!Array.isArray(options)) return null;
+	const existingNames = new Set(options.map((option: any) => option?.name).filter(Boolean));
+	const missingNames = (property.options ?? []).filter((name) => !existingNames.has(name));
+	if (missingNames.length === 0) return null;
+	return {
+		select: {
+			options: [
+				...options.map((option: any) => ({
+					name: option.name,
+					...(option.color ? { color: option.color } : {}),
+				})),
+				...missingNames.map((name) => ({ name })),
+			],
+		},
+	};
+}
+
 async function findChildByTitle(notion: any, parentPageId: string, title: string, type: string) {
 	let cursor: string | undefined;
 	do {
@@ -598,12 +626,11 @@ async function appendSetupInstructions(
 			block_id: settingsPageId,
 			children: [
 				headingBlock("Worker setup"),
-				paragraphBlock("Set Tiller secrets on this Worker. Do not store Tiller passwords in Notion."),
-				codeBlock(`ntn workers env set TILLER_PORTAL_CONFIG_DATA_SOURCE_ID="${refs.config?.dataSourceId ?? ""}"
-ntn workers env set TILLER_EMAIL="you@example.com"
-ntn workers env set TILLER_PASSWORD="..."
-ntn workers webhooks list`),
-				paragraphBlock("Use the installer credentials command to update Worker secrets later."),
+				paragraphBlock("Tiller and Notion secrets are stored on the Worker. Do not store passwords in Notion database fields."),
+				paragraphBlock("To update Tiller login or other credentials later, run this in Terminal:"),
+				codeBlock(`${CLI_COMMAND} credentials`),
+				paragraphBlock("To check the install, run this in Terminal:"),
+				codeBlock(`${CLI_COMMAND} doctor`),
 			],
 		});
 	}
@@ -618,9 +645,9 @@ ntn workers webhooks list`),
 				paragraphBlock("To print webhook URLs again, run this in Terminal:"),
 				codeBlock(`ntn workers webhooks list --workers-config-file "$HOME/.notion-tiller-portal/worker/workers.json"`),
 				paragraphBlock("Create these Notion database automations:"),
-				paragraphBlock("Tiller Templates: when Action is set to Add to Tiller, Push Update, or Check Status, send webhook to templateAction."),
-				paragraphBlock("Tiller Work Orders: when Action is set to Submit to Tiller, Check Status, or Download Results, send webhook to workOrderAction."),
-				paragraphBlock("Tiller Campaigns: when Action is set to Validate, Build CSV, or Submit Render, send webhook to campaignAction."),
+				paragraphBlock("Templates database: when Action is set to Add to Tiller, Push Update, Check Status, or Sync Data Table, send webhook to templateAction."),
+				paragraphBlock("Work Orders database: when Action is set to Submit to Tiller, Check Status, or Download Results, send webhook to workOrderAction."),
+				paragraphBlock("Campaigns database: when Action is set to Validate, Build CSV, or Submit Render, send webhook to campaignAction."),
 				paragraphBlock("For each Send webhook action: paste the matching webhook URL, leave custom headers empty, and check Select all existing properties under Content."),
 				paragraphBlock("The Worker reads the page ID from Notion's payload and loads the full page through the Notion API. You do not need to build custom JSON."),
 				paragraphBlock("Use cavalryWorkOrderStarted as the destination URL for Cavalry scripts."),
@@ -634,7 +661,7 @@ ntn workers webhooks list`),
 			block_id: settingsPageId,
 			children: [
 				headingBlock("Campaign data setup"),
-				paragraphBlock("Campaign Data Rows use underscore fields for portal control: _Row, _Campaign, _Include in Render, _Row Status, and _Output Name. Your CSV columns should be exact template field names like Name, Title, Background, or any other Tiller CSV column."),
+				paragraphBlock("Campaign Data Rows use underscore fields for portal control: _Row, _Campaign, _Include in Render, _Row Status, and _Output Name. Your CSV columns should be exact template field names like Name, Title, Background, or any other Tiller CSV column. Templates can also generate their own data rows tables with Sync Data Table; use those template-specific tables when a template needs reusable row data before campaign rendering."),
 				paragraphBlock("Templates, Work Orders, and Campaigns have _Progress, _Milestone, and _Progress Note fields for live action feedback. Keep these near Action in your views."),
 			],
 		});
@@ -668,7 +695,7 @@ async function appendSetupChecklist(
 			toDoBlock("Save Worker secrets", true),
 			toDoBlock("Store webhook URLs in Settings", storedWebhookUrls),
 			toDoBlock("Create Notion automations for Templates, Work Orders, and Campaigns", false),
-			toDoBlock("Run `notion-tiller-portal doctor`", false),
+			toDoBlock("Run the doctor command from Settings", false),
 			toDoBlock("Use Add New Template or Start Workorder for daily input", false),
 			paragraphBlock(`Portal page ID: ${portalPageId}`),
 			paragraphBlock(`Settings page ID: ${settingsPageId}`),

@@ -94,9 +94,9 @@ If Node is missing, install Node using the command it prints, then rerun bootstr
 The installer asks for:
 
 - Setup checklist Notion page URL
+- Notion internal integration token
 - Portal page name
 - Database name prefix
-- Notion internal integration token
 - Tiller email
 - Tiller password
 
@@ -136,7 +136,7 @@ Create these Notion database automations:
 
 | Database | Trigger | Send webhook URL |
 | --- | --- | --- |
-| Templates | `Action` is set to `Add to Tiller`, `Push Update`, or `Check Status` | `templateAction` |
+| Templates | `Action` is set to `Add to Tiller`, `Push Update`, `Check Status`, or `Sync Data Table` | `templateAction` |
 | Work Orders | `Action` is set to `Submit to Tiller`, `Check Status`, or `Download Results` | `workOrderAction` |
 | Campaigns | `Action` is set to `Validate`, `Build CSV`, or `Submit Render` | `campaignAction` |
 
@@ -145,6 +145,8 @@ For each `Send webhook` action:
 - URL: paste the matching Worker webhook URL
 - Custom headers: leave empty
 - Content: check `Select all existing properties`
+
+No custom JSON is needed. Notion sends the page event. The Worker reads the page ID from that event and loads the full page through the Notion API.
 
 ## Step 7: Run Doctor
 

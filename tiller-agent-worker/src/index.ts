@@ -406,6 +406,23 @@ worker.tool("submitTemplate", {
 	},
 });
 
+worker.tool("syncTemplateDataTable", {
+	title: "Sync Template Data Table",
+	description:
+		"Create or repair a template-specific Campaign Data Rows database from the CSV parameters stored in Template Details.",
+	schema: j.object({
+		pageId: j.string().describe("The Notion Templates page ID to sync."),
+	}),
+	execute: async ({ pageId }, { notion }) => {
+		try {
+			return syncTemplateDataTableFromPage({ notion, pageId });
+		} catch (error) {
+			await writePageError(notion, pageId, error);
+			return formatToolError(error);
+		}
+	},
+});
+
 worker.tool("finalizeTemplateAssets", {
 	title: "Finalize Template Assets",
 	description:
@@ -415,6 +432,7 @@ worker.tool("finalizeTemplateAssets", {
 	}),
 	execute: async ({ pageId }, { notion }) => {
 		try {
+			await assertPageInDataSource(notion, pageId, "templates");
 			const page = await notion.pages.retrieve({ page_id: pageId });
 			const summary = summarizeNotionTemplatePage(page);
 			if (!summary.tillerTemplateId) {
@@ -531,6 +549,7 @@ async function buildCampaignCsvFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "campaigns");
 	await setPageProgress(notion, pageId, 5, "Queued", "Preparing campaign CSV.");
 	const validation = await validateCampaignFromPage({ notion, pageId });
 	if (!validation.valid) throw new Error(validation.message);
@@ -572,10 +591,43 @@ async function submitCampaignRenderFromPage({
 	pageId: string;
 	pollSeconds: number;
 }) {
+	await assertPageInDataSource(notion, pageId, "campaigns");
+	const actionId = await claimActionLock(notion, pageId, "Submit Render");
+	try {
 	await setPageProgress(notion, pageId, 5, "Queued", "Preparing campaign render.");
 	const validation = await validateCampaignFromPage({ notion, pageId });
 	if (!validation.valid) throw new Error(validation.message);
 	if (!validation.templatePageId) throw new Error("Campaign is missing linked Template.");
+	const campaignPage = await notion.pages.retrieve({ page_id: pageId });
+	const campaign = summarizeNotionCampaignPage(campaignPage);
+	if (campaign.workOrderPageIds.length > 0) {
+		const workOrderPageId = campaign.workOrderPageIds[0];
+		await setPageProgress(notion, pageId, 80, "Checking Status", "Campaign already has a linked work order.");
+		const status = await checkWorkOrderStatusFromPage({ notion, pageId: workOrderPageId });
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				"Campaign Status": { select: { name: status.notionStatus === "Done" ? "Done" : "Rendering" } },
+				"Last Error": richTextValue(""),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		await setPageProgress(notion, pageId, status.notionStatus === "Done" ? 100 : 80, status.notionStatus === "Done" ? "Done" : "Waiting on Tiller", "Checked the linked work order instead of creating a duplicate.");
+		return {
+			ok: true,
+			pageId,
+			workOrderPageId,
+			tillerTemplateId: null,
+			tillerWorkOrderId: status.tillerWorkOrderId,
+			tillerStatus: status.tillerStatus,
+			notionStatus: status.notionStatus,
+			rowCount: validation.includedRows.length,
+			outputRows: [],
+			results: [],
+			message: "Campaign already had a linked work order, so I checked that work order instead of creating a duplicate.",
+		};
+	}
 
 	await setPageProgress(notion, pageId, 25, "Building CSV", "Creating work order CSV from campaign rows.");
 	const templatePage = await notion.pages.retrieve({ page_id: validation.templatePageId });
@@ -630,6 +682,7 @@ async function submitCampaignRenderFromPage({
 			"Generated CSV": richTextLongValue(csv),
 			"CSV Row Count": { number: validation.includedRows.length },
 			"Work Order": relationValue(workOrderPage.id),
+			"Last Action ID": richTextValue(actionId),
 			"Last Error": richTextValue(""),
 			"Last Synced At": { date: { start: new Date().toISOString() } },
 		},
@@ -724,6 +777,7 @@ async function submitCampaignRenderFromPage({
 		page_id: pageId,
 		properties: {
 			"Campaign Status": { select: { name: notionStatus === "Done" ? "Done" : "Rendering" } },
+			"Last Action ID": richTextValue(actionId),
 			"Last Error": richTextValue(statusResult.status === "Failed" ? "Tiller render failed." : ""),
 			"Last Synced At": { date: { start: new Date().toISOString() } },
 		},
@@ -749,6 +803,9 @@ async function submitCampaignRenderFromPage({
 		results,
 		message: notionStatus === "Done" ? "Campaign render completed and outputs attached." : "Campaign render submitted; still processing.",
 	};
+	} finally {
+		await releaseActionLock(notion, pageId, actionId);
+	}
 }
 
 async function validateCampaignFromPage({
@@ -758,6 +815,7 @@ async function validateCampaignFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "campaigns");
 	await setPageProgress(notion, pageId, 10, "Reading Template", "Checking linked template requirements.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const campaign = summarizeNotionCampaignPage(page);
@@ -784,7 +842,12 @@ async function validateCampaignFromPage({
 	}
 
 	const rows: CampaignDataRowSummary[] = csvColumns.length > 0
-		? await queryCampaignDataRows({ notion, campaignPageId: pageId, csvColumns })
+		? await queryCampaignDataRows({
+			notion,
+			campaignPageId: pageId,
+			csvColumns,
+			dataSourceId: template?.dataRowsDatabaseId || "",
+		})
 		: [];
 	await setPageProgress(notion, pageId, 50, "Checking Rows", "Checking included campaign rows.");
 	const includedRows = rows
@@ -847,6 +910,7 @@ async function checkWorkOrderStatusFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "workOrders");
 	await setPageProgress(notion, pageId, 20, "Checking Status", "Checking Tiller work order status.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionWorkOrderPage(page);
@@ -892,6 +956,7 @@ async function submitWorkOrderFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "workOrders");
 	await setPageProgress(notion, pageId, 5, "Queued", "Preparing work order.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionWorkOrderPage(page);
@@ -906,6 +971,8 @@ async function submitWorkOrderFromPage({
 		return finalizeWorkOrderInputs({ notion, pageId, pollSeconds: 30 });
 	}
 
+	const actionId = await claimActionLock(notion, pageId, "Submit to Tiller");
+	try {
 	const client = new TillerClient();
 	await setPageProgress(notion, pageId, 15, "Authenticating Tiller", "Connecting to Tiller.");
 	await client.authenticate();
@@ -940,6 +1007,7 @@ async function submitWorkOrderFromPage({
 			"Tiller Work Order ID": { number: workOrderId },
 			"Submitted At": { date: { start: new Date().toISOString() } },
 			"Required Uploads": richTextValue(formatRequiredUploads(pendingParameters)),
+			"Last Action ID": richTextValue(actionId),
 			"Last Error": richTextValue(""),
 		},
 	});
@@ -960,6 +1028,9 @@ async function submitWorkOrderFromPage({
 			? "Work order created. Attach files to created Upload rows, then submit again."
 			: "Work order created with no parameter uploads required.",
 	};
+	} finally {
+		await releaseActionLock(notion, pageId, actionId);
+	}
 }
 
 async function submitTemplateFromPage({
@@ -969,6 +1040,7 @@ async function submitTemplateFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "templates");
 	await setPageProgress(notion, pageId, 5, "Queued", "Preparing template.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionTemplatePage(page);
@@ -984,6 +1056,8 @@ async function submitTemplateFromPage({
 		throw new Error("Template row is missing Cavalry Scene file.");
 	}
 
+	const actionId = await claimActionLock(notion, pageId, "Add to Tiller");
+	try {
 	await setPageProgress(notion, pageId, 15, "Reading Cav file", "Reading attached Cavalry file.");
 	const scene = await fetchNotionJsonFile(summary.cavalryScenes[0]);
 	const client = new TillerClient();
@@ -1026,6 +1100,7 @@ async function submitTemplateFromPage({
 				"Tiller Template ID": { number: templateId },
 				"Required Assets": richTextValue(formatRequiredUploads(pendingAssets)),
 				...formatTemplateDetailProperties(templateDetails),
+				"Last Action ID": richTextValue(actionId),
 					"Tiller Response": richTextValue(
 						formatTemplateResponse({
 							status: tillerStatus,
@@ -1060,6 +1135,9 @@ async function submitTemplateFromPage({
 			? "Template created. Attach files to created Upload rows, then sync again."
 			: "Template created with no asset uploads required.",
 	};
+	} finally {
+		await releaseActionLock(notion, pageId, actionId);
+	}
 }
 
 async function checkTemplateStatusFromPage({
@@ -1069,6 +1147,7 @@ async function checkTemplateStatusFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "templates");
 	await setPageProgress(notion, pageId, 20, "Checking Status", "Checking template status in Tiller.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionTemplatePage(page);
@@ -1116,6 +1195,78 @@ async function checkTemplateStatusFromPage({
 	};
 }
 
+async function syncTemplateDataTableFromPage({
+	notion,
+	pageId,
+}: {
+	notion: any;
+	pageId: string;
+}) {
+	await assertPageInDataSource(notion, pageId, "templates");
+	await setPageProgress(notion, pageId, 10, "Reading Template", "Reading template details.");
+	const page = await notion.pages.retrieve({ page_id: pageId });
+	const summary = summarizeNotionTemplatePage(page);
+	if (!summary.name) throw new Error("Template row is missing Name.");
+
+	let details = parseTemplateDetails(summary.templateDetails);
+	if (!details && summary.tillerTemplateId) {
+		await setPageProgress(notion, pageId, 25, "Checking Status", "Fetching template details from Tiller.");
+		const client = new TillerClient();
+		await client.authenticate();
+		details = await buildTemplateSetupDetails(client, summary.tillerTemplateId, {});
+	}
+	if (!details) {
+		throw new Error("Template Details are missing. Use Add to Tiller or Check Status before Sync Data Table.");
+	}
+
+	const csvParameters = getTemplateCsvParameters(details)
+		.slice()
+		.sort((a, b) => a.columnIndex - b.columnIndex);
+	const csvColumns = csvParameters.map((parameter) => parameter.name).filter(Boolean);
+	if (csvColumns.length === 0) {
+		throw new Error("Template Details do not include CSV parameters.");
+	}
+	assertUniqueCsvColumns(csvColumns);
+
+	await setPageProgress(notion, pageId, 40, "Building Data Table", "Creating or repairing template data rows database.");
+	const campaignsDataSourceId = await getDataSourceId(notion, "campaigns");
+	const databaseName = `${summary.name} Data Rows`;
+	const dataTable = await findOrCreateTemplateDataTable({
+		notion,
+		parentPageId: pageId,
+		databaseName,
+		existingDataSourceId: summary.dataRowsDatabaseId,
+		campaignsDataSourceId,
+		csvColumns,
+	});
+
+	await setPageProgress(notion, pageId, 85, "Updating Template", "Saving data table link on template.");
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Action: { select: { name: "None" } },
+			"Data Rows Database ID": richTextValue(dataTable.dataSourceId),
+			"Data Rows Database URL": { url: dataTable.url || null },
+			"Data Rows Status": { select: { name: "Ready" } },
+			...formatTemplateDetailProperties(details),
+			"Last Synced At": { date: { start: new Date().toISOString() } },
+			"Last Error": richTextValue(""),
+		},
+	});
+	await setPageProgress(notion, pageId, 100, "Ready", `Data table ready with ${csvColumns.length} CSV columns.`);
+
+	return {
+		ok: true,
+		pageId,
+		template: summary.name,
+		dataSourceId: dataTable.dataSourceId,
+		databaseId: dataTable.databaseId,
+		url: dataTable.url,
+		columns: csvColumns,
+		message: "Template data table is ready.",
+	};
+}
+
 async function runTemplateActionFromPage({
 	notion,
 	pageId,
@@ -1123,6 +1274,7 @@ async function runTemplateActionFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "templates");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionTemplatePage(page);
 	if (!summary.action || summary.action === "None") {
@@ -1130,6 +1282,9 @@ async function runTemplateActionFromPage({
 	}
 	if (summary.action === "Check Status") {
 		return checkTemplateStatusFromPage({ notion, pageId });
+	}
+	if (summary.action === "Sync Data Table") {
+		return syncTemplateDataTableFromPage({ notion, pageId });
 	}
 	if (
 		summary.action === "Add to Tiller" ||
@@ -1148,6 +1303,7 @@ async function runWorkOrderActionFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "workOrders");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionWorkOrderPage(page);
 	if (!summary.action || summary.action === "None") {
@@ -1172,6 +1328,7 @@ async function runCampaignActionFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "campaigns");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionCampaignPage(page);
 	if (!summary.action || summary.action === "None") {
@@ -1461,6 +1618,99 @@ async function getDataSourceId(notion: any, key: PortalDataSourceKey) {
 	);
 }
 
+async function assertPageInDataSource(notion: any, pageId: string, key: PortalDataSourceKey) {
+	const page = await notion.pages.retrieve({ page_id: pageId });
+	const expectedDataSourceId = await getDataSourceId(notion, key);
+	const actualParent = getPageParentId(page);
+	if (!actualParent) {
+		throw new PageScopeError(`Page ${pageId} has no readable parent. Refusing to run this action.`);
+	}
+	if (actualParent === expectedDataSourceId) return;
+
+	const expectedParentIds = new Set([expectedDataSourceId]);
+	try {
+		const dataSource = await notion.dataSources.retrieve({ data_source_id: expectedDataSourceId });
+		const databaseId = getDataSourceParentDatabaseId(dataSource);
+		if (databaseId) expectedParentIds.add(databaseId);
+	} catch {
+		// If lookup fails, strict data_source_id comparison above is still enforced.
+	}
+	if (!expectedParentIds.has(actualParent)) {
+		throw new PageScopeError(`This action can only run on ${displayDataSourceKey(key)} pages from the configured portal database.`);
+	}
+}
+
+class PageScopeError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "PageScopeError";
+	}
+}
+
+function getPageParentId(page: unknown) {
+	const parent = (page as { parent?: Record<string, unknown> })?.parent;
+	if (!parent || typeof parent !== "object") return "";
+	if (typeof parent.data_source_id === "string") return parent.data_source_id;
+	if (typeof parent.database_id === "string") return parent.database_id;
+	return "";
+}
+
+function displayDataSourceKey(key: PortalDataSourceKey) {
+	return {
+		templates: "Template",
+		workOrders: "Work Order",
+		campaigns: "Campaign",
+		campaignDataRows: "Campaign Data Rows",
+		renderOutputs: "Render Outputs",
+		uploads: "Uploads",
+	}[key];
+}
+
+async function claimActionLock(notion: any, pageId: string, actionName: string) {
+	const page = await notion.pages.retrieve({ page_id: pageId });
+	const properties = (page as { properties?: Record<string, unknown> }).properties ?? {};
+	const existingLock = getRichTextProperty(properties["Worker Lock"]);
+	const lockExpiresAt = getDateProperty(properties["Lock Expires At"]);
+	if (existingLock && lockExpiresAt && lockExpiresAt.getTime() > Date.now()) {
+		throw new Error(`${actionName} is already running. Wait a minute, then try again if it does not finish.`);
+	}
+
+	const actionId = `${actionName}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+	const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			"Worker Lock": richTextValue(actionId),
+			"Lock Expires At": { date: { start: expiresAt } },
+			"Last Action ID": richTextValue(actionId),
+		},
+	});
+
+	const check = await notion.pages.retrieve({ page_id: pageId });
+	const checkProperties = (check as { properties?: Record<string, unknown> }).properties ?? {};
+	if (getRichTextProperty(checkProperties["Worker Lock"]) !== actionId) {
+		throw new Error(`${actionName} was already picked up by another worker run.`);
+	}
+	return actionId;
+}
+
+async function releaseActionLock(notion: any, pageId: string, actionId: string) {
+	try {
+		const page = await notion.pages.retrieve({ page_id: pageId });
+		const properties = (page as { properties?: Record<string, unknown> }).properties ?? {};
+		if (getRichTextProperty(properties["Worker Lock"]) !== actionId) return;
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				"Worker Lock": richTextValue(""),
+				"Lock Expires At": { date: null },
+			},
+		});
+	} catch {
+		// Lock expiry is the fallback if release cannot complete.
+	}
+}
+
 async function getPortalConfig(notion: any): Promise<Partial<PortalConfig>> {
 	if (!portalConfigPromise) {
 		portalConfigPromise = loadPortalConfig(notion).catch((error) => {
@@ -1565,7 +1815,11 @@ function summarizeNotionTemplatePage(page: unknown) {
 		status: getSelectProperty(properties.Status),
 		tillerTemplateId: getNumberProperty(properties["Tiller Template ID"]),
 		templateAssetsUrl: getUrlProperty(properties["Template Assets URL"]),
+		templateDetails: getRichTextProperty(properties["Template Details"]),
 		csvColumns: getRichTextProperty(properties["CSV Columns"]),
+		dataRowsDatabaseId: getRichTextProperty(properties["Data Rows Database ID"]),
+		dataRowsDatabaseUrl: getUrlProperty(properties["Data Rows Database URL"]),
+		dataRowsStatus: getSelectProperty(properties["Data Rows Status"]),
 		parameterFilePath: getRichTextProperty(properties["Parameter File Path"]),
 		cavalryScenes: [
 			...getFilesProperty(properties["Cav File"]),
@@ -1625,6 +1879,13 @@ function getSelectProperty(property: unknown) {
 function getNumberProperty(property: unknown) {
 	const value = (property as { number?: number | null })?.number;
 	return typeof value === "number" ? value : null;
+}
+
+function getDateProperty(property: unknown) {
+	const start = (property as { date?: { start?: string | null } | null })?.date?.start;
+	if (typeof start !== "string" || !start) return null;
+	const date = new Date(start);
+	return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function getUrlProperty(property: unknown) {
@@ -2043,6 +2304,15 @@ function getTemplateCsvParameters(details: unknown) {
 		.filter((parameter) => parameter.name);
 }
 
+function parseTemplateDetails(value: string) {
+	if (!value.trim()) return null;
+	try {
+		return JSON.parse(value) as unknown;
+	} catch {
+		throw new Error("Template Details are not valid JSON. Use Check Status to refresh them.");
+	}
+}
+
 function getTemplateSmartFolderParameters(details: unknown) {
 	const template = (details as { template?: { smartFolderParameters?: unknown[] } })?.template;
 	return (Array.isArray(template?.smartFolderParameters) ? template.smartFolderParameters : [])
@@ -2149,6 +2419,7 @@ async function finalizeTemplateAssets({
 	pageId: string;
 	templateId: number;
 }) {
+	await assertPageInDataSource(notion, pageId, "templates");
 	await setPageProgress(notion, pageId, 20, "Checking Status", "Checking template asset status.");
 	const client = new TillerClient();
 	await client.authenticate();
@@ -2438,6 +2709,7 @@ async function finalizeWorkOrderInputs({
 	pageId: string;
 	pollSeconds: number;
 }) {
+	await assertPageInDataSource(notion, pageId, "workOrders");
 	await setPageProgress(notion, pageId, 45, "Uploading Parameters", "Checking work order parameters.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionWorkOrderPage(page);
@@ -2670,6 +2942,7 @@ async function downloadWorkOrderResultsFromPage({
 	notion: any;
 	pageId: string;
 }) {
+	await assertPageInDataSource(notion, pageId, "workOrders");
 	await setPageProgress(notion, pageId, 90, "Downloading Outputs", "Checking for finished render outputs.");
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const summary = summarizeNotionWorkOrderPage(page);
@@ -2757,6 +3030,12 @@ async function receiveCavalryWorkOrderStarted({
 	body: unknown;
 }) {
 	const payload = parseCavalryWorkOrderPayload(body);
+	if (payload.campaignPageId) {
+		await assertPageInDataSource(notion, payload.campaignPageId, "campaigns");
+	}
+	if (payload.templatePageId) {
+		await assertPageInDataSource(notion, payload.templatePageId, "templates");
+	}
 	const dataSourceId = await getDataSourceId(notion, "workOrders");
 	const client = new TillerClient();
 	await client.authenticate();
@@ -3429,19 +3708,28 @@ async function queryCampaignDataRows({
 	notion,
 	campaignPageId,
 	csvColumns,
+	dataSourceId,
 }: {
 	notion: any;
 	campaignPageId: string;
 	csvColumns: string[];
+	dataSourceId?: string;
 }) {
-	const dataSourceId = await getDataSourceId(notion, "campaignDataRows");
-	const response = await notion.dataSources.query({
-		data_source_id: dataSourceId,
-		page_size: 100,
-	});
-	return response.results
-		.map((row: unknown) => summarizeCampaignDataRow(row, csvColumns))
-		.filter((row: CampaignDataRowSummary) => row.campaignPageIds.includes(campaignPageId));
+	const resolvedDataSourceId = dataSourceId || await getDataSourceId(notion, "campaignDataRows");
+	const rows: CampaignDataRowSummary[] = [];
+	let cursor: string | undefined;
+	do {
+		const response = await notion.dataSources.query({
+			data_source_id: resolvedDataSourceId,
+			page_size: 100,
+			...(cursor ? { start_cursor: cursor } : {}),
+		});
+		rows.push(...(response.results ?? [])
+			.map((row: unknown) => summarizeCampaignDataRow(row, csvColumns))
+			.filter((row: CampaignDataRowSummary) => row.campaignPageIds.includes(campaignPageId)));
+		cursor = response.has_more ? response.next_cursor : undefined;
+	} while (cursor);
+	return rows;
 }
 
 function getTemplateCsvColumns(template: ReturnType<typeof summarizeNotionTemplatePage>) {
@@ -3453,6 +3741,210 @@ function parseCsvColumns(value: string) {
 		.split(",")
 		.map((column) => column.trim())
 		.filter(Boolean);
+}
+
+const TEMPLATE_DATA_ROW_CONTROL_FIELDS = [
+	"_Row",
+	"_Campaign",
+	"_Include in Render",
+	"_Row Status",
+	"_Output Name",
+];
+
+function assertUniqueCsvColumns(csvColumns: string[]) {
+	const seen = new Set<string>();
+	const duplicates = new Set<string>();
+	for (const column of csvColumns) {
+		if (seen.has(column)) duplicates.add(column);
+		seen.add(column);
+	}
+	if (duplicates.size > 0) {
+		throw new Error(`Template CSV columns must be unique. Duplicate columns: ${Array.from(duplicates).join(", ")}.`);
+	}
+	const reserved = csvColumns.filter((column) => TEMPLATE_DATA_ROW_CONTROL_FIELDS.includes(column));
+	if (reserved.length > 0) {
+		throw new Error(`Template CSV columns conflict with portal fields: ${reserved.join(", ")}.`);
+	}
+}
+
+async function findOrCreateTemplateDataTable({
+	notion,
+	parentPageId,
+	databaseName,
+	existingDataSourceId,
+	campaignsDataSourceId,
+	csvColumns,
+}: {
+	notion: any;
+	parentPageId: string;
+	databaseName: string;
+	existingDataSourceId: string;
+	campaignsDataSourceId: string;
+	csvColumns: string[];
+}) {
+	if (existingDataSourceId) {
+		const dataSource = await notion.dataSources.retrieve({ data_source_id: existingDataSourceId });
+		await repairTemplateDataTableProperties({
+			notion,
+			dataSourceId: existingDataSourceId,
+			existingProperties: dataSource.properties ?? {},
+			campaignsDataSourceId,
+			csvColumns,
+		});
+		return {
+			dataSourceId: existingDataSourceId,
+			databaseId: getDataSourceParentDatabaseId(dataSource),
+			url: typeof dataSource.url === "string" ? dataSource.url : "",
+		};
+	}
+
+	const existingDatabase = await findChildDatabaseByTitle(notion, parentPageId, databaseName);
+	if (existingDatabase?.dataSourceId) {
+		const dataSource = await notion.dataSources.retrieve({ data_source_id: existingDatabase.dataSourceId });
+		await repairTemplateDataTableProperties({
+			notion,
+			dataSourceId: existingDatabase.dataSourceId,
+			existingProperties: dataSource.properties ?? {},
+			campaignsDataSourceId,
+			csvColumns,
+		});
+		return {
+			dataSourceId: existingDatabase.dataSourceId,
+			databaseId: existingDatabase.databaseId,
+			url: existingDatabase.url,
+		};
+	}
+
+	const database = await notion.databases.create({
+		parent: { type: "page_id", page_id: parentPageId },
+		title: [{ type: "text", text: { content: databaseName } }],
+		is_inline: false,
+		initial_data_source: {
+			properties: templateDataRowBaseProperties(csvColumns),
+		},
+	});
+	const dataSourceId = database.data_sources?.[0]?.id;
+	if (!dataSourceId) throw new Error(`Created database ${databaseName} has no data source.`);
+	const createdDataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
+	await repairTemplateDataTableProperties({
+		notion,
+		dataSourceId,
+		existingProperties: createdDataSource.properties ?? {},
+		campaignsDataSourceId,
+		csvColumns,
+	});
+	return {
+		dataSourceId,
+		databaseId: typeof database.id === "string" ? database.id : "",
+		url: typeof database.url === "string" ? database.url : "",
+	};
+}
+
+async function repairTemplateDataTableProperties({
+	notion,
+	dataSourceId,
+	existingProperties,
+	campaignsDataSourceId,
+	csvColumns,
+}: {
+	notion: any;
+	dataSourceId: string;
+	existingProperties: Record<string, any>;
+	campaignsDataSourceId: string;
+	csvColumns: string[];
+}) {
+	const desired = templateDataRowAllProperties(campaignsDataSourceId, csvColumns);
+	const updates: Record<string, any> = {};
+	for (const [name, request] of Object.entries(desired)) {
+		const existing = existingProperties[name];
+		if (!existing) {
+			updates[name] = request;
+			continue;
+		}
+		const selectRequest = (request as { select?: { options?: Array<{ name?: string; color?: string }> } }).select;
+		if (selectRequest) {
+			const selectUpdate = selectOptionsUpdate(existing, selectRequest.options ?? []);
+			if (selectUpdate) updates[name] = selectUpdate;
+		}
+	}
+	if (Object.keys(updates).length === 0) return;
+	await notion.dataSources.update({
+		data_source_id: dataSourceId,
+		properties: updates,
+	});
+}
+
+function templateDataRowBaseProperties(csvColumns: string[]) {
+	return {
+		"_Row": { title: {} },
+		"_Include in Render": { checkbox: {} },
+		"_Row Status": { select: { options: ["Draft", "Valid", "Invalid", "Rendered"].map((name) => ({ name })) } },
+		"_Output Name": { rich_text: {} },
+		...Object.fromEntries(csvColumns.map((column) => [column, { rich_text: {} }])),
+	};
+}
+
+function templateDataRowAllProperties(campaignsDataSourceId: string, csvColumns: string[]) {
+	return {
+		...templateDataRowBaseProperties(csvColumns),
+		"_Campaign": {
+			relation: {
+				data_source_id: campaignsDataSourceId,
+				type: "single_property",
+				single_property: {},
+			},
+		},
+	};
+}
+
+function selectOptionsUpdate(existingProperty: any, desiredOptions: Array<{ name?: string; color?: string }>) {
+	const existingOptions = existingProperty?.select?.options;
+	if (!Array.isArray(existingOptions)) return null;
+	const existingNames = new Set(existingOptions.map((option: any) => option?.name).filter(Boolean));
+	const missing = desiredOptions.filter((option) => option.name && !existingNames.has(option.name));
+	if (missing.length === 0) return null;
+	return {
+		select: {
+			options: [
+				...existingOptions.map((option: any) => ({
+					name: option.name,
+					...(option.color ? { color: option.color } : {}),
+				})),
+				...missing.map((option) => ({ name: option.name })),
+			],
+		},
+	};
+}
+
+async function findChildDatabaseByTitle(notion: any, parentPageId: string, title: string) {
+	let cursor: string | undefined;
+	do {
+		const response = await notion.blocks.children.list({
+			block_id: parentPageId,
+			page_size: 100,
+			...(cursor ? { start_cursor: cursor } : {}),
+		});
+		for (const child of response.results ?? []) {
+			if (child?.type !== "child_database") continue;
+			const childTitle = child.child_database?.title;
+			if (childTitle !== title) continue;
+			const database = await notion.databases.retrieve({ database_id: child.id });
+			return {
+				databaseId: typeof database.id === "string" ? database.id : child.id,
+				dataSourceId: database.data_sources?.[0]?.id ?? "",
+				url: typeof database.url === "string" ? database.url : "",
+			};
+		}
+		cursor = response.has_more ? response.next_cursor : undefined;
+	} while (cursor);
+	return null;
+}
+
+function getDataSourceParentDatabaseId(dataSource: any) {
+	const parent = dataSource?.parent;
+	if (parent?.type === "database_id" && typeof parent.database_id === "string") return parent.database_id;
+	if (typeof dataSource?.database_id === "string") return dataSource.database_id;
+	return "";
 }
 
 function buildCsv(columns: string[], rows: Array<Record<string, string>>) {
@@ -3784,18 +4276,40 @@ async function writePageError(
 	pageId: string,
 	error: unknown,
 ) {
-	await setPageProgress(notion, pageId, 100, "Error", (error as Error)?.message ?? String(error));
+	if (error instanceof PageScopeError) return;
+	const message = formatUserFacingError(error);
+	await setPageProgress(notion, pageId, 100, "Error", message);
 	try {
 		await notion.pages.update({
 			page_id: pageId,
 			properties: {
 				Action: { select: { name: "None" } },
-				"Last Error": richTextValue(
-					(error as Error)?.message ?? String(error),
-				),
+				"Last Error": richTextValue(message),
 			},
 		});
 	} catch {
 		// Preserve original failure for tool output.
 	}
+}
+
+function formatUserFacingError(error: unknown) {
+	const message = (error as Error)?.message ?? String(error);
+	if (error instanceof PageScopeError) {
+		return "This action is connected to the wrong portal database. Open the matching Tiller database row and try again.";
+	}
+	const missingSecret = message.match(/^Missing worker secret: ([A-Z0-9_]+)$/);
+	if (missingSecret) {
+		return `Worker setup is missing ${missingSecret[1]}. Run the credentials setup, then try again.`;
+	}
+	const tillerStatus = message.match(/^Tiller API error (\d+)/);
+	if (tillerStatus) {
+		return `Tiller rejected this request (HTTP ${tillerStatus[1]}). Check the row details and Tiller status, then try again.`;
+	}
+	if (message.startsWith("Fetch failed for ")) {
+		return "Could not connect to Tiller or a linked file. Check credentials, network access, and file links, then try again.";
+	}
+	if (message.includes("already running") || message.includes("already picked up")) {
+		return message;
+	}
+	return message;
 }

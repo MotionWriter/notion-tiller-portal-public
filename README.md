@@ -74,6 +74,8 @@ For each Notion `Send webhook` action:
 - Custom headers: none
 - Content: `Select all existing properties`
 
+No custom JSON is needed. The Worker reads the Notion page ID from the webhook event and retrieves the full page.
+
 ## Notes
 
 Tiller password and Notion API token are set on Notion Worker env. They are not stored in Notion pages or installer state.
