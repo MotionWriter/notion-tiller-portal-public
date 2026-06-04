@@ -96,9 +96,9 @@ async function main() {
 
 	printSection("Step 5 of 5", "Save Worker secrets");
 	await printSecretCommandWarning();
-	const allowArgSecret = await askAction(rl, "Continue setting Worker secrets? [y/N] ");
+	const allowArgSecret = await askActionYesNoDefault(rl, "Continue setting Worker secrets? [y/N] ", false);
 	rl.close();
-	if (!/^y(es)?$/i.test(allowArgSecret.trim())) throw new Error("Stopped before setting secrets.");
+	if (!allowArgSecret) throw new Error("Stopped before setting secrets.");
 
 	run("ntn", ["doctor"], { allowFail: true });
 	await prepareWorkerDir();
@@ -132,8 +132,8 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	const parentPageId = state.parentPageId || await ask(rl, "Setup page URL or ID: ");
 	const portalName = state.portalName || defaultPortalName;
 	const databasePrefix = state.databasePrefix || defaultDatabasePrefix;
-	const updateToken = await ask(rl, "Update Notion internal integration token? [y/N] ");
-	if (/^y(es)?$/i.test(updateToken.trim())) {
+	const updateToken = await askYesNoDefault(rl, "Update Notion internal integration token? [y/N] ", false);
+	if (updateToken) {
 		await printNotionTokenHelp();
 		const notionApiToken = await askHidden(rl, "Notion internal integration token: ");
 		setWorkerEnv(workersConfig, "NOTION_API_TOKEN", notionApiToken);
@@ -687,14 +687,23 @@ async function askOptional(rl, prompt, fallback) {
 }
 
 async function askYesNo(rl, prompt) {
-	const value = await question(rl, prompt);
-	return /^y(es)?$/i.test(value.trim());
+	for (;;) {
+		printActionNeeded();
+		const value = await question(rl, prompt);
+		const parsed = parseYesNo(value);
+		if (parsed != null) return parsed;
+		console.log("Please type Yes or No.");
+	}
 }
 
 async function askYesNoDefault(rl, prompt, fallback) {
-	const value = await question(rl, prompt);
-	if (!value.trim()) return fallback;
-	return /^y(es)?$/i.test(value.trim());
+	for (;;) {
+		const value = await question(rl, prompt);
+		if (!value.trim()) return fallback;
+		const parsed = parseYesNo(value);
+		if (parsed != null) return parsed;
+		console.log("Please type Yes or No.");
+	}
 }
 
 async function askActionYesNoDefault(rl, prompt, fallback) {
@@ -714,6 +723,13 @@ async function askHidden(rl, prompt) {
 
 function question(rl, prompt) {
 	return new Promise((resolve) => rl.question(prompt, resolve));
+}
+
+function parseYesNo(value) {
+	const normalized = String(value ?? "").trim().toLowerCase();
+	if (normalized === "y" || normalized === "yes") return true;
+	if (normalized === "n" || normalized === "no") return false;
+	return null;
 }
 
 function printActionNeeded() {
