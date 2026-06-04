@@ -120,6 +120,7 @@ async function main() {
 	setWorkerEnv(workersConfig, "TILLER_PASSWORD", tillerPassword);
 	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env"], workerId, parentPageId, portalName, databasePrefix });
 
+	await ensureTillerAuth(workersConfig);
 	await finishInstall({ parentPageId, workerId, workersConfig, portalName, databasePrefix });
 }
 
@@ -139,6 +140,7 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	}
 	rl.close();
 
+	await ensureTillerAuth(workersConfig);
 	await finishInstall({ parentPageId, workerId: state.workerId, workersConfig, portalName, databasePrefix });
 }
 
@@ -168,16 +170,6 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		"--workers-config-file",
 		workersConfig,
 	], { cwd: workerDir, allowFail: true, message: "Saving portal configuration" });
-
-	await runWithSpinner("ntn", [
-		"workers",
-		"exec",
-		"testTillerConnection",
-		"-d",
-		"{}",
-		"--workers-config-file",
-		workersConfig,
-	], { cwd: workerDir, allowFail: true, message: "Testing Tiller connection" });
 
 	const webhooks = await runWithSpinner("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], {
 		cwd: workerDir,
@@ -336,7 +328,16 @@ async function updateCredentials() {
 	}
 
 	if (updateTiller || updates.some(([name]) => name === "TILLER_API_BASE")) {
-		run("ntn", [
+		await ensureTillerAuth(workersConfig);
+	}
+
+	console.log("\nCredentials updated. Run doctor to verify:");
+	console.log(`${cliCommand} doctor`);
+}
+
+async function ensureTillerAuth(workersConfig) {
+	for (;;) {
+		const result = await runWithSpinner("ntn", [
 			"workers",
 			"exec",
 			"testTillerConnection",
@@ -344,11 +345,28 @@ async function updateCredentials() {
 			"{}",
 			"--workers-config-file",
 			workersConfig,
-		], { cwd: workerDir, allowFail: true });
-	}
+		], { cwd: workerDir, allowFail: true, message: "Testing Tiller login" });
+		const parsed = parseLastJson(result.stdout);
+		const authOk = parsed?.ok === true || parsed?.data?.ok === true;
+		if (result.status === 0 && authOk) {
+			printInfo(parsed?.data?.message || parsed?.message || "Tiller login verified.");
+			return;
+		}
 
-	console.log("\nCredentials updated. Run doctor to verify:");
-	console.log(`${cliCommand} doctor`);
+		const reason = parsed?.error || parsed?.data?.error || parsed?.message || parsed?.data?.message || lastNonEmptyLine(result.stderr) || lastNonEmptyLine(result.stdout) || "Unknown Tiller auth error.";
+		console.log(`\nTiller login failed: ${reason}`);
+		const rl = createPrompt();
+		const retry = await askActionYesNoDefault(rl, "Update Tiller email/password now? [Y/n] ", true);
+		if (!retry) {
+			rl.close();
+			throw new Error(`Tiller login failed. Run this later to update credentials:\n${cliCommand} credentials`);
+		}
+		const email = await ask(rl, "Tiller email: ");
+		const password = await askHidden(rl, "Tiller password: ");
+		rl.close();
+		setWorkerEnv(workersConfig, "TILLER_EMAIL", email);
+		setWorkerEnv(workersConfig, "TILLER_PASSWORD", password);
+	}
 }
 
 async function runOnboarding() {
@@ -723,6 +741,14 @@ function parseLastJson(value) {
 		}
 	}
 	return null;
+}
+
+function lastNonEmptyLine(value) {
+	return String(value ?? "")
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.at(-1) ?? "";
 }
 
 function readState() {
