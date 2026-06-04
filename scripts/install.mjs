@@ -32,6 +32,7 @@ const color = {
 	bold: (value) => useColor ? `\x1b[1m${value}\x1b[22m` : value,
 	cyan: (value) => useColor ? `\x1b[36m${value}\x1b[39m` : value,
 	dim: (value) => useColor ? `\x1b[2m${value}\x1b[22m` : value,
+	link: (value) => useColor ? `\x1b[1m\x1b[36m\x1b[4m${value}\x1b[24m\x1b[39m\x1b[22m` : value,
 	yellow: (value) => useColor ? `\x1b[33m${value}\x1b[39m` : value,
 };
 
@@ -362,7 +363,7 @@ async function runOnboarding() {
 	await question(rl, "Press Enter when that page is ready.");
 
 	printSection("Step 2 of 3", "Notion integration token");
-	console.log(color.dim(`Open: ${notionIntegrationUrl}`));
+	console.log(`${color.dim("Open:")} ${color.link(notionIntegrationUrl)}`);
 	printInfo("Create or open an internal integration.");
 	printInfo("Copy the integration token.");
 	printInfo("Share your setup page with that integration.\n");
@@ -636,7 +637,7 @@ function printInfo(message) {
 
 async function printNotionTokenHelp() {
 	console.log("");
-	console.log(color.dim(`Open: ${notionIntegrationUrl}`));
+	console.log(`${color.dim("Open:")} ${color.link(notionIntegrationUrl)}`);
 	console.log(color.dim("Create or open an internal integration, copy the Integration token, and share the setup page with it.\n"));
 	await sleep(1500);
 }
