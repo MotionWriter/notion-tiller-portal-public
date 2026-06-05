@@ -19,6 +19,7 @@ const DATA_SOURCE_ENV: Record<PortalDataSourceKey, string> = {
 	workOrders: "WORK_ORDERS_DATA_SOURCE_ID",
 	campaigns: "CAMPAIGNS_DATA_SOURCE_ID",
 	campaignDataRows: "CAMPAIGN_DATA_ROWS_DATA_SOURCE_ID",
+	templateDataTableIndex: "TEMPLATE_DATA_TABLE_INDEX_DATA_SOURCE_ID",
 	renderOutputs: "RENDER_OUTPUTS_DATA_SOURCE_ID",
 	uploads: "UPLOADS_DATA_SOURCE_ID",
 };
@@ -28,11 +29,14 @@ const CONFIG_PROPERTY_BY_KEY: Record<PortalDataSourceKey, string> = {
 	workOrders: "Work Orders Data Source ID",
 	campaigns: "Campaigns Data Source ID",
 	campaignDataRows: "Campaign Data Rows Data Source ID",
+	templateDataTableIndex: "Template Data Table Index Data Source ID",
 	renderOutputs: "Render Outputs Data Source ID",
 	uploads: "Uploads Data Source ID",
 };
 
-type PortalConfig = Record<PortalDataSourceKey, string>;
+type PortalConfig = Record<PortalDataSourceKey, string> & {
+	templateDataTablesPageId: string;
+};
 let portalConfigPromise: Promise<Partial<PortalConfig>> | null = null;
 
 worker.tool("setupWorkspace", {
@@ -1230,13 +1234,22 @@ async function syncTemplateDataTableFromPage({
 
 	await setPageProgress(notion, pageId, 40, "Building Data Table", "Creating or repairing template data rows database.");
 	const campaignsDataSourceId = await getDataSourceId(notion, "campaigns");
+	const templateDataTablesPageId = await getTemplateDataTablesParentPageId(notion, pageId);
 	const databaseName = `${summary.name} Data Rows`;
 	const dataTable = await findOrCreateTemplateDataTable({
 		notion,
-		parentPageId: pageId,
+		parentPageId: templateDataTablesPageId,
 		databaseName,
 		existingDataSourceId: summary.dataRowsDatabaseId,
 		campaignsDataSourceId,
+		csvColumns,
+	});
+	await upsertTemplateDataTableIndexRow({
+		notion,
+		templatePageId: pageId,
+		templateName: summary.name,
+		databaseName,
+		dataTable,
 		csvColumns,
 	});
 
@@ -1618,6 +1631,13 @@ async function getDataSourceId(notion: any, key: PortalDataSourceKey) {
 	);
 }
 
+async function getTemplateDataTablesParentPageId(notion: any, fallbackPageId: string) {
+	const explicit = process.env.TEMPLATE_DATA_TABLES_PAGE_ID;
+	if (explicit) return explicit;
+	const config = await getPortalConfig(notion);
+	return config.templateDataTablesPageId || fallbackPageId;
+}
+
 async function assertPageInDataSource(notion: any, pageId: string, key: PortalDataSourceKey) {
 	const page = await notion.pages.retrieve({ page_id: pageId });
 	const expectedDataSourceId = await getDataSourceId(notion, key);
@@ -1661,6 +1681,7 @@ function displayDataSourceKey(key: PortalDataSourceKey) {
 		workOrders: "Work Order",
 		campaigns: "Campaign",
 		campaignDataRows: "Campaign Data Rows",
+		templateDataTableIndex: "Template Data Table Index",
 		renderOutputs: "Render Outputs",
 		uploads: "Uploads",
 	}[key];
@@ -1739,6 +1760,7 @@ async function loadPortalConfig(notion: any): Promise<Partial<PortalConfig>> {
 	for (const key of Object.keys(CONFIG_PROPERTY_BY_KEY) as PortalDataSourceKey[]) {
 		config[key] = getRichTextProperty(properties[CONFIG_PROPERTY_BY_KEY[key]]);
 	}
+	config.templateDataTablesPageId = getRichTextProperty(properties["Template Data Tables Page ID"]);
 	return config;
 }
 
@@ -3838,6 +3860,57 @@ async function findOrCreateTemplateDataTable({
 		databaseId: typeof database.id === "string" ? database.id : "",
 		url: typeof database.url === "string" ? database.url : "",
 	};
+}
+
+async function upsertTemplateDataTableIndexRow({
+	notion,
+	templatePageId,
+	templateName,
+	databaseName,
+	dataTable,
+	csvColumns,
+}: {
+	notion: any;
+	templatePageId: string;
+	templateName: string;
+	databaseName: string;
+	dataTable: { dataSourceId: string; databaseId: string; url: string };
+	csvColumns: string[];
+}) {
+	let indexDataSourceId = "";
+	try {
+		indexDataSourceId = await getDataSourceId(notion, "templateDataTableIndex");
+	} catch {
+		return;
+	}
+	if (!indexDataSourceId) return;
+
+	const existing = await notion.dataSources.query({
+		data_source_id: indexDataSourceId,
+		page_size: 1,
+		filter: {
+			property: "Name",
+			title: { equals: databaseName },
+		},
+	});
+	const properties = {
+		Name: titleValue(databaseName),
+		Template: { relation: [{ id: templatePageId }] },
+		"Data Rows Database URL": { url: dataTable.url || null },
+		"Data Rows Database ID": richTextValue(dataTable.dataSourceId),
+		"CSV Columns": richTextValue(csvColumns.join(", ")),
+		Status: { select: { name: "Ready" } },
+		"Last Synced At": { date: { start: new Date().toISOString() } },
+		"Last Error": richTextValue(""),
+	};
+	if (existing.results?.[0]?.id) {
+		await notion.pages.update({ page_id: existing.results[0].id, properties });
+		return;
+	}
+	await notion.pages.create({
+		parent: { type: "data_source_id", data_source_id: indexDataSourceId },
+		properties,
+	});
 }
 
 async function repairTemplateDataTableProperties({

@@ -30,6 +30,7 @@ type SetupWorkspaceResult = {
 	parentPageId: string;
 	portalPageId: string;
 	settingsPageId: string;
+	templateDataTablesPageId: string;
 	configDataSourceId: string;
 	dataSources: Record<string, string>;
 	nextSteps: string[];
@@ -53,11 +54,11 @@ const CLI_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-
 const STARTER_VIEWS: StarterViewSpec[] = [
 	{
 		key: "campaigns",
-		name: "Active Campaigns",
+		name: "Open Campaigns",
 		type: "table",
 		filter: { property: "Campaign Status", select: { does_not_equal: "Done" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "_Progress Note", "Campaign Status", "Template", "Work Order", "CSV Row Count", "Last Error"],
+		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Generated CSV", "Action", "Work Order", "Render Outputs", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "campaigns",
@@ -65,15 +66,15 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Campaign Status", select: { equals: "Needs Fix" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "Campaign Status", "Template", "CSV Row Count", "Last Error"],
+		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Action", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "campaigns",
-		name: "Ready to Render",
+		name: "Ready - Submit Render",
 		type: "table",
 		filter: { property: "Campaign Status", select: { equals: "Ready" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "Campaign Status", "Template", "CSV Row Count", "Generated CSV"],
+		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Generated CSV", "Action", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "campaigns",
@@ -81,21 +82,21 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Campaign Status", select: { equals: "Done" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Campaign Status", "Template", "Work Order", "Render Outputs", "CSV Row Count", "Last Synced At"],
+		visibleProperties: ["Name", "Render Outputs", "Work Order", "Template", "CSV Row Count", "Campaign Status", "Last Synced At"],
 	},
 	{
 		key: "campaignDataRows",
-		name: "By Campaign",
+		name: "All Rows",
 		type: "table",
-		visibleProperties: ["_Row", "_Campaign", "_Include in Render", "_Row Status", "_Output Name"],
+		visibleProperties: ["_Row", "_Campaign", "_Include in Render", "_Row Status"],
 		includeCsvProperties: true,
 	},
 	{
 		key: "campaignDataRows",
-		name: "Included Rows",
+		name: "Rows Included in Render",
 		type: "table",
 		filter: { property: "_Include in Render", checkbox: { equals: true } },
-		visibleProperties: ["_Row", "_Campaign", "_Include in Render", "_Row Status", "_Output Name"],
+		visibleProperties: ["_Row", "_Campaign", "_Include in Render", "_Row Status"],
 		includeCsvProperties: true,
 	},
 	{
@@ -104,7 +105,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Status", select: { does_not_equal: "Archived" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "_Progress Note", "Status", "Cav File", "Template Assets URL", "Tiller Template ID", "Data Rows Status", "Data Rows Database URL", "Tiller Response", "Last Error"],
+		visibleProperties: ["Name", "Cav File", "Template Assets URL", "Status", "Action", "_Milestone", "_Progress Note", "Required Assets", "Data Rows Status", "Data Rows Database URL", "Last Error"],
 	},
 	{
 		key: "templates",
@@ -112,7 +113,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "gallery",
 		filter: { property: "Status", select: { equals: "Ready" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Status", "Tiller Template ID", "CSV Columns", "Data Rows Status", "Data Rows Database URL", "Parameter File Path", "Last Synced At"],
+		visibleProperties: ["Name", "Status", "CSV Columns", "Data Rows Status", "Data Rows Database URL", "Tiller Template ID", "Last Synced At"],
 	},
 	{
 		key: "templates",
@@ -120,15 +121,15 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Status", select: { equals: "PendingAssets" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "Status", "Template Assets URL", "Required Assets", "Tiller Response", "Last Error"],
+		visibleProperties: ["Name", "Template Assets URL", "Required Assets", "Status", "Action", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "workOrders",
-		name: "Start Workorder",
+		name: "Start Work Order",
 		type: "table",
 		filter: { property: "Render Status", select: { does_not_equal: "Archived" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "_Progress Note", "Render Status", "Template", "Campaign", "Tiller Template ID", "Render Count", "Parameter CSV", "Dynamic Assets", "Template Assets URL", "Required Uploads", "Last Error"],
+		visibleProperties: ["Name", "Template", "Campaign", "Render Count", "Parameter CSV", "Dynamic Assets", "Template Assets URL", "Required Uploads", "Render Status", "Action", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "workOrders",
@@ -136,7 +137,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Render Status", select: { does_not_equal: "Done" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "Render Status", "Template", "Campaign", "Tiller Work Order ID", "Render Count", "Required Uploads", "Last Error"],
+		visibleProperties: ["Name", "Render Status", "_Milestone", "_Progress Note", "Template", "Campaign", "Render Count", "Required Uploads", "Last Error"],
 	},
 	{
 		key: "workOrders",
@@ -144,31 +145,72 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Render Status", select: { equals: "Done" } },
 		sorts: [{ property: "Completed At", direction: "descending" }],
-		visibleProperties: ["Name", "Action", "_Progress", "_Milestone", "Render Status", "Completed Renders", "Render Outputs", "Completed At"],
+		visibleProperties: ["Name", "Render Outputs", "Completed Renders", "Completed At", "Render Status", "Action", "Last Error"],
 	},
 	{
 		key: "workOrders",
-		name: "Done",
+		name: "Completed",
 		type: "table",
 		filter: { property: "Render Status", select: { equals: "Done" } },
 		sorts: [{ property: "Completed At", direction: "descending" }],
-		visibleProperties: ["Name", "Render Status", "Template", "Campaign", "Tiller Work Order ID", "Completed Renders", "Render Outputs", "Completed At"],
+		visibleProperties: ["Name", "Render Outputs", "Completed Renders", "Completed At", "Template", "Campaign", "Render Status", "Tiller Work Order ID"],
+	},
+	{
+		key: "templateDataTableIndex",
+		name: "All Template Data Tables",
+		type: "table",
+		sorts: [{ property: "Last Synced At", direction: "descending" }],
+		visibleProperties: ["Name", "Template", "Data Rows Database URL", "CSV Columns", "Status", "Last Synced At", "Last Error"],
+	},
+	{
+		key: "templateDataTableIndex",
+		name: "Needs Sync",
+		type: "table",
+		filter: { property: "Status", select: { does_not_equal: "Ready" } },
+		sorts: [{ property: "Last Synced At", direction: "descending" }],
+		visibleProperties: ["Name", "Template", "Status", "Data Rows Database URL", "CSV Columns", "Last Error"],
 	},
 	{
 		key: "renderOutputs",
 		name: "Recent Outputs",
 		type: "gallery",
 		sorts: [{ property: "Downloaded At", direction: "descending" }],
-		visibleProperties: ["Name", "Output File", "Status", "Campaign", "Work Order", "Template", "Output Index", "Downloaded At"],
+		visibleProperties: ["Name", "Output File", "Status", "Campaign", "Work Order", "Template", "Output Filename", "Output Index", "Downloaded At", "Last Error"],
 	},
 	{
 		key: "renderOutputs",
-		name: "By Campaign",
+		name: "All Outputs",
 		type: "table",
 		sorts: [{ property: "Downloaded At", direction: "descending" }],
-		visibleProperties: ["Name", "Output File", "Status", "Campaign", "Work Order", "Template", "Output Index", "Downloaded At", "Last Error"],
+		visibleProperties: ["Name", "Output File", "Status", "Campaign", "Work Order", "Template", "Output Filename", "Output Index", "Downloaded At", "File Size Bytes", "Last Error"],
+	},
+	{
+		key: "renderOutputs",
+		name: "Failed Outputs",
+		type: "table",
+		filter: { property: "Status", select: { equals: "Failed" } },
+		sorts: [{ property: "Downloaded At", direction: "descending" }],
+		visibleProperties: ["Name", "Status", "Campaign", "Work Order", "Template", "Output Filename", "Last Error"],
 	},
 ];
+
+const LEGACY_VIEW_NAMES: Partial<Record<DatabaseKey, Record<string, string[]>>> = {
+	campaigns: {
+		"Open Campaigns": ["Active Campaigns"],
+		"Ready - Submit Render": ["Ready to Render"],
+	},
+	campaignDataRows: {
+		"All Rows": ["By Campaign"],
+		"Rows Included in Render": ["Included Rows"],
+	},
+	workOrders: {
+		"Start Work Order": ["Start Workorder"],
+		Completed: ["Done"],
+	},
+	renderOutputs: {
+		"All Outputs": ["By Campaign"],
+	},
+};
 
 export async function setupWorkspace({
 	notion,
@@ -189,6 +231,7 @@ export async function setupWorkspace({
 			parentPageId,
 			portalPageId: "",
 			settingsPageId: "",
+			templateDataTablesPageId: "",
 			configDataSourceId: "",
 			dataSources: {},
 			nextSteps: dryRunNextSteps(),
@@ -203,10 +246,16 @@ export async function setupWorkspace({
 	const databasePrefix = cleanName(input.databasePrefix) || "Tiller";
 	const portalPageId = await findOrCreateChildPage(notion, parentPageId, portalTitle, created);
 	const settingsPageId = await findOrCreateChildPage(notion, portalPageId, SETTINGS_PAGE_TITLE, created);
+	const templateDataTablesPageId = await findOrCreateChildPage(notion, portalPageId, "Template Data Tables", created);
 
 	const refs: Partial<Record<DatabaseKey, DataSourceRef>> = {};
 	for (const spec of DATABASE_SPECS) {
-		const parentId = spec.placement === "settings" ? settingsPageId : portalPageId;
+		const parentId =
+			spec.placement === "settings"
+				? settingsPageId
+				: spec.placement === "templateDataTables"
+					? templateDataTablesPageId
+					: portalPageId;
 		refs[spec.key] = await findOrCreateDatabase(notion, parentId, spec, displayDatabaseName(spec, databasePrefix), created);
 	}
 
@@ -222,6 +271,7 @@ export async function setupWorkspace({
 		parentPageId,
 		portalPageId,
 		settingsPageId,
+		templateDataTablesPageId,
 		configDataSourceId: refs.config?.dataSourceId ?? "",
 		refs,
 		webhookUrls: input.webhookUrls ?? {},
@@ -231,6 +281,7 @@ export async function setupWorkspace({
 		await appendSetupChecklist(notion, parentPageId, {
 			portalPageId,
 			settingsPageId,
+			templateDataTablesPageId,
 			storedWebhookUrls: Boolean(Object.keys(input.webhookUrls ?? {}).length),
 		});
 	}
@@ -241,6 +292,7 @@ export async function setupWorkspace({
 		parentPageId,
 		portalPageId,
 		settingsPageId,
+		templateDataTablesPageId,
 		configDataSourceId: refs.config?.dataSourceId ?? "",
 		dataSources: Object.fromEntries(
 			Object.entries(refs).map(([key, ref]) => [key, ref?.dataSourceId ?? ""]),
@@ -353,13 +405,13 @@ async function ensureStarterViews(
 			if (!ref) continue;
 			const dataSource = await notion.dataSources.retrieve({ data_source_id: ref.dataSourceId });
 			const properties = dataSource.properties ?? {};
-			const existingViews = await listViews(ref.databaseId);
-			for (const view of views) {
-				const configuration = buildViewConfiguration(view, properties);
-				const existing = existingViews.get(view.name);
-				if (existing?.id) {
-					await updateView(existing.id, view, configuration);
-					repaired.push(`view:${view.key}:${view.name}`);
+				const existingViews = await listViews(ref.databaseId);
+				for (const view of views) {
+					const configuration = buildViewConfiguration(view, properties);
+					const existing = findExistingView(existingViews, view);
+					if (existing?.id) {
+						await updateView(existing.id, view, configuration);
+						repaired.push(`view:${view.key}:${view.name}`);
 					continue;
 				}
 				await createView(ref, view, configuration);
@@ -370,6 +422,16 @@ async function ensureStarterViews(
 	} catch (error) {
 		repaired.push(`views:skipped:${(error as Error)?.message ?? String(error)}`);
 	}
+}
+
+function findExistingView(existingViews: Map<string, { id: string }>, view: StarterViewSpec) {
+	const existing = existingViews.get(view.name);
+	if (existing) return existing;
+	for (const legacyName of LEGACY_VIEW_NAMES[view.key]?.[view.name] ?? []) {
+		const legacy = existingViews.get(legacyName);
+		if (legacy) return legacy;
+	}
+	return null;
 }
 
 function groupViewsByDatabase(views: StarterViewSpec[]) {
@@ -398,15 +460,23 @@ async function listViews(databaseId: string) {
 }
 
 function buildViewConfiguration(view: StarterViewSpec, properties: Record<string, unknown>) {
-	const visible = new Set(view.visibleProperties ?? []);
+	const visibleOrder = [...(view.visibleProperties ?? [])].filter((name) => properties[name]);
 	if (view.includeCsvProperties) {
 		for (const name of Object.keys(properties)) {
 			if (name.startsWith("_")) continue;
 			if (["Campaign", "Include in Render", "Row Order", "Row Status", "Output Name"].includes(name)) continue;
-			visible.add(name);
+			if (!visibleOrder.includes(name)) visibleOrder.push(name);
 		}
 	}
-	const configuredProperties = Object.keys(properties).map((name) => ({
+	if (view.includeCsvProperties && properties["_Output Name"] && !visibleOrder.includes("_Output Name")) {
+		visibleOrder.push("_Output Name");
+	}
+	const visible = new Set(visibleOrder);
+	const configuredPropertyNames = [
+		...visibleOrder,
+		...Object.keys(properties).filter((name) => !visible.has(name)),
+	];
+	const configuredProperties = configuredPropertyNames.map((name) => ({
 		property_id: name,
 		visible: visible.has(name),
 		...(visible.has(name) ? { width: propertyWidth(name) } : {}),
@@ -565,6 +635,7 @@ async function upsertConfigRow({
 	parentPageId,
 	portalPageId,
 	settingsPageId,
+	templateDataTablesPageId,
 	configDataSourceId,
 	refs,
 	webhookUrls,
@@ -573,6 +644,7 @@ async function upsertConfigRow({
 	parentPageId: string;
 	portalPageId: string;
 	settingsPageId: string;
+	templateDataTablesPageId: string;
 	configDataSourceId: string;
 	refs: Partial<Record<DatabaseKey, DataSourceRef>>;
 	webhookUrls: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted", string>>;
@@ -592,10 +664,12 @@ async function upsertConfigRow({
 		"Parent Page ID": richTextValue(parentPageId),
 		"Portal Page ID": richTextValue(portalPageId),
 		"Settings Page ID": richTextValue(settingsPageId),
+		"Template Data Tables Page ID": richTextValue(templateDataTablesPageId),
 		"Templates Data Source ID": richTextValue(refs.templates?.dataSourceId ?? ""),
 		"Work Orders Data Source ID": richTextValue(refs.workOrders?.dataSourceId ?? ""),
 		"Campaigns Data Source ID": richTextValue(refs.campaigns?.dataSourceId ?? ""),
 		"Campaign Data Rows Data Source ID": richTextValue(refs.campaignDataRows?.dataSourceId ?? ""),
+		"Template Data Table Index Data Source ID": richTextValue(refs.templateDataTableIndex?.dataSourceId ?? ""),
 		"Render Outputs Data Source ID": richTextValue(refs.renderOutputs?.dataSourceId ?? ""),
 		"Uploads Data Source ID": richTextValue(refs.uploads?.dataSourceId ?? ""),
 		...(webhookUrls.templateAction ? { "Template Webhook URL": { url: webhookUrls.templateAction } } : {}),
@@ -661,7 +735,7 @@ async function appendSetupInstructions(
 			block_id: settingsPageId,
 			children: [
 				headingBlock("Campaign data setup"),
-				paragraphBlock("Campaign Data Rows use underscore fields for portal control: _Row, _Campaign, _Include in Render, _Row Status, and _Output Name. Your CSV columns should be exact template field names like Name, Title, Background, or any other Tiller CSV column. Templates can also generate their own data rows tables with Sync Data Table; use those template-specific tables when a template needs reusable row data before campaign rendering."),
+				paragraphBlock("Campaign Data Rows use underscore fields for portal control: _Row, _Campaign, _Include in Render, _Row Status, and _Output Name. Your CSV columns should be exact template field names like Name, Title, Background, or any other Tiller CSV column. Templates can also generate their own data rows tables with Sync Data Table. Those tables live in the Template Data Tables area so they are easy to find from the portal."),
 				paragraphBlock("Templates, Work Orders, and Campaigns have _Progress, _Milestone, and _Progress Note fields for live action feedback. Keep these near Action in your views."),
 			],
 		});
@@ -674,10 +748,12 @@ async function appendSetupChecklist(
 	{
 		portalPageId,
 		settingsPageId,
+		templateDataTablesPageId,
 		storedWebhookUrls,
 	}: {
 		portalPageId: string;
 		settingsPageId: string;
+		templateDataTablesPageId: string;
 		storedWebhookUrls: boolean;
 	},
 ) {
@@ -696,9 +772,10 @@ async function appendSetupChecklist(
 			toDoBlock("Store webhook URLs in Settings", storedWebhookUrls),
 			toDoBlock("Create Notion automations for Templates, Work Orders, and Campaigns", false),
 			toDoBlock("Run the doctor command from Settings", false),
-			toDoBlock("Use Add New Template or Start Workorder for daily input", false),
+			toDoBlock("Use Add New Template, Start Work Order, or Ready - Submit Render for daily input", false),
 			paragraphBlock(`Portal page ID: ${portalPageId}`),
 			paragraphBlock(`Settings page ID: ${settingsPageId}`),
+			paragraphBlock(`Template Data Tables page ID: ${templateDataTablesPageId}`),
 		],
 	});
 }
