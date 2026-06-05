@@ -29,6 +29,7 @@ type SetupWorkspaceResult = {
 	dryRun: boolean;
 	parentPageId: string;
 	portalPageId: string;
+	howToUsePageId: string;
 	settingsPageId: string;
 	templateDataTablesPageId: string;
 	configDataSourceId: string;
@@ -211,6 +212,7 @@ export async function setupWorkspace({
 			dryRun,
 			parentPageId,
 			portalPageId: "",
+			howToUsePageId: "",
 			settingsPageId: "",
 			templateDataTablesPageId: "",
 			configDataSourceId: "",
@@ -226,6 +228,7 @@ export async function setupWorkspace({
 	const portalTitle = cleanName(input.portalName) || PORTAL_PAGE_TITLE;
 	const databasePrefix = cleanName(input.databasePrefix) || "Tiller";
 	const portalPageId = await findOrCreateChildPage(notion, parentPageId, portalTitle, created);
+	const howToUsePageId = await findOrCreateChildPage(notion, portalPageId, "How to Use", created);
 	const settingsPageId = await findOrCreateChildPage(notion, portalPageId, SETTINGS_PAGE_TITLE, created);
 	const templateDataTablesPageId = await findOrCreateChildPage(notion, portalPageId, "Template Data Tables", created);
 
@@ -257,7 +260,8 @@ export async function setupWorkspace({
 		refs,
 		webhookUrls: input.webhookUrls ?? {},
 	});
-	await appendPortalNavigation(notion, portalPageId, settingsPageId, templateDataTablesPageId, refs);
+	await appendHowToUsePage(notion, howToUsePageId);
+	await appendPortalNavigation(notion, portalPageId, howToUsePageId, settingsPageId, templateDataTablesPageId, refs);
 	await appendSetupInstructions(notion, settingsPageId, refs);
 	await appendWebhookUrlInstructions(notion, settingsPageId, input.webhookUrls ?? {});
 	if (input.writeSetupChecklist !== false) {
@@ -268,10 +272,11 @@ export async function setupWorkspace({
 
 	return {
 		ok: true,
-		dryRun,
-		parentPageId,
-		portalPageId,
-		settingsPageId,
+			dryRun,
+			parentPageId,
+			portalPageId,
+			howToUsePageId,
+			settingsPageId,
 		templateDataTablesPageId,
 		configDataSourceId: refs.config?.dataSourceId ?? "",
 		dataSources: Object.fromEntries(
@@ -668,9 +673,56 @@ async function upsertConfigRow({
 	});
 }
 
+async function appendHowToUsePage(notion: any, howToUsePageId: string) {
+	const existing = await findChildByTitle(notion, howToUsePageId, "Daily workflow", "heading_2");
+	if (existing?.id) return;
+
+	await notion.blocks.children.append({
+		block_id: howToUsePageId,
+		children: [
+			headingBlock("Daily workflow"),
+			paragraphBlock("Use this portal from left to right: upload a Template, sync its data table, add Campaign rows, then submit the Campaign render."),
+			codeBlockWithLanguage(`flowchart TD
+  A[Add Template] --> B[Action: Add to Tiller]
+  B --> C{Template Ready?}
+  C -- Needs assets --> D[Add assets / Push Update]
+  D --> C
+  C -- Ready --> E[Action: Sync Data Table]
+  E --> F[Add rows in template data table]
+  F --> G[Create Campaign and link Template]
+  G --> H{Need CSV review?}
+  H -- Yes --> I[Action: Build CSV]
+  I --> J[Review Generated CSV]
+  H -- No --> K[Action: Submit Render]
+  J --> K
+  K --> L[Worker builds CSV and submits Work Order]
+  L --> M[Render Outputs attach in Notion]`, "mermaid"),
+			headingBlock("1. Add a Template"),
+			paragraphBlock("Open Templates, create a row, attach the Cavalry file in Cav File, then set Action to Add to Tiller."),
+			paragraphBlock("If Tiller needs assets, add them to the Template Assets URL or Upload rows, then set Action to Push Update."),
+			headingBlock("2. Sync the Template data table"),
+			paragraphBlock("When the Template is Ready, set Action to Sync Data Table. This creates a template-specific data rows database from Tiller CSV Columns."),
+			paragraphBlock("Each Template has its own data table. Do not use a generic campaign data table."),
+			headingBlock("3. Add Campaign rows"),
+			paragraphBlock("Open the Template data table, add rows, link _Campaign to the Campaign, and check _Include in Render for each row that should render."),
+			paragraphBlock("CSV field names must match the Template CSV Columns exactly."),
+			headingBlock("4. Build CSV preview"),
+			paragraphBlock("Optional: set Campaign Action to Build CSV. This writes Generated CSV and CSV Row Count so you can review before rendering."),
+			headingBlock("5. Submit Render"),
+			paragraphBlock("Set Campaign Action to Submit Render. The Worker validates rows, builds the CSV, saves it on the Campaign, creates the Tiller Work Order, uploads parameters, and watches for outputs."),
+			headingBlock("6. Review outputs"),
+			paragraphBlock("Finished files appear in Render Outputs and link back to the Campaign, Work Order, and Template."),
+			headingBlock("Fix credentials"),
+			paragraphBlock("If Tiller login fails, run this in Terminal:"),
+			codeBlock(`${CLI_COMMAND} credentials`),
+		],
+	});
+}
+
 async function appendPortalNavigation(
 	notion: any,
 	portalPageId: string,
+	howToUsePageId: string,
 	settingsPageId: string,
 	templateDataTablesPageId: string,
 	refs: Partial<Record<DatabaseKey, DataSourceRef>>,
@@ -682,6 +734,9 @@ async function appendPortalNavigation(
 		block_id: portalPageId,
 		children: [
 			headingBlock("Portal navigation"),
+			calloutBlock("Start here", "green_background", [
+				linkedParagraphBlock("How to Use", notionPageUrl(howToUsePageId)),
+			]),
 			calloutBlock("Campaigns (primary)", "yellow_background", [
 				linkedParagraphBlock("Campaigns", refs.campaigns?.url),
 			]),
@@ -895,11 +950,15 @@ function toDoBlock(content: string, checked: boolean) {
 }
 
 function codeBlock(content: string) {
+	return codeBlockWithLanguage(content, "shell");
+}
+
+function codeBlockWithLanguage(content: string, language: string) {
 	return {
 		object: "block",
 		type: "code",
 		code: {
-			language: "shell",
+			language,
 			rich_text: richText(content),
 		},
 	};
