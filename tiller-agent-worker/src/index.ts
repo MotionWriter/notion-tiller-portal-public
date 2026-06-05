@@ -637,11 +637,21 @@ async function submitCampaignRenderFromPage({
 	const templatePage = await notion.pages.retrieve({ page_id: validation.templatePageId });
 	const template = summarizeNotionTemplatePage(templatePage);
 	if (!template.tillerTemplateId) throw new Error("Linked Template is missing Tiller Template ID.");
-	const parameterPath = template.parameterFilePath || "parameters.csv";
-	const csv = buildCsv(validation.columns, validation.includedRows.map((row) => row.values));
-	const csvFile = {
-		name: parameterPath.split("/").pop() || "parameters.csv",
-		bytes: new TextEncoder().encode(csv).buffer,
+		const parameterPath = template.parameterFilePath || "parameters.csv";
+		const csv = buildCsv(validation.columns, validation.includedRows.map((row) => row.values));
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				"Generated CSV": richTextLongValue(csv),
+				"CSV Row Count": { number: validation.includedRows.length },
+				"Last Error": richTextValue(""),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		await setPageProgress(notion, pageId, 32, "CSV Ready", "CSV created. Submitting render to Tiller.");
+		const csvFile = {
+			name: parameterPath.split("/").pop() || "parameters.csv",
+			bytes: new TextEncoder().encode(csv).buffer,
 		contentType: "text/csv",
 	};
 
