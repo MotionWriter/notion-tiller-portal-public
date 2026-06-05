@@ -90,6 +90,7 @@ worker.tool("testTillerConnection", {
 		try {
 			const client = new TillerClient();
 			await client.authenticate();
+			await client.request("GET", "/Template");
 
 			return {
 				ok: true,
