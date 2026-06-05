@@ -275,11 +275,12 @@ export async function setupWorkspace({
 		configDataSourceId: refs.config?.dataSourceId ?? "",
 		refs,
 		webhookUrls: input.webhookUrls ?? {},
-	});
-	await appendSetupInstructions(notion, settingsPageId, refs);
-	if (input.writeSetupChecklist !== false) {
-		await appendSetupChecklist(notion, parentPageId, {
-			portalPageId,
+		});
+		await appendSetupInstructions(notion, settingsPageId, refs);
+		await appendWebhookUrlInstructions(notion, settingsPageId, input.webhookUrls ?? {});
+		if (input.writeSetupChecklist !== false) {
+			await appendSetupChecklist(notion, parentPageId, {
+				portalPageId,
 			settingsPageId,
 			templateDataTablesPageId,
 			storedWebhookUrls: Boolean(Object.keys(input.webhookUrls ?? {}).length),
@@ -740,6 +741,37 @@ async function appendSetupInstructions(
 			],
 		});
 	}
+}
+
+async function appendWebhookUrlInstructions(
+	notion: any,
+	settingsPageId: string,
+	webhookUrls: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted", string>>,
+) {
+	if (Object.keys(webhookUrls).length === 0) return;
+	const existing = await findChildByTitle(notion, settingsPageId, "Webhook URLs", "heading_2");
+	if (existing?.id) return;
+
+	await notion.blocks.children.append({
+		block_id: settingsPageId,
+		children: [
+			headingBlock("Webhook URLs"),
+			paragraphBlock("Use these URLs in Notion automations. Leave custom headers empty and select all existing properties under Content."),
+			...webhookUrlBlocks("Template Action", "Use this in the Templates database automation.", webhookUrls.templateAction),
+			...webhookUrlBlocks("Work Order Action", "Use this in the Work Orders database automation.", webhookUrls.workOrderAction),
+			...webhookUrlBlocks("Campaign Action", "Use this in the Campaigns database automation.", webhookUrls.campaignAction),
+			...webhookUrlBlocks("Cavalry Work Order Started", "Use this as the destination URL from Cavalry scripts.", webhookUrls.cavalryWorkOrderStarted),
+		],
+	});
+}
+
+function webhookUrlBlocks(label: string, help: string, url?: string) {
+	if (!url) return [paragraphBlock(`${label}: not found. Run ntn workers webhooks list to inspect Worker webhooks.`)];
+	return [
+		paragraphBlock(label),
+		paragraphBlock(help),
+		codeBlock(url),
+	];
 }
 
 async function appendSetupChecklist(

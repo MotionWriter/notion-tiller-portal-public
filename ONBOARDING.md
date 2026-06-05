@@ -109,24 +109,21 @@ Database name prefix: Tiller
 
 For client/studio demos, use a prefix like `Acme` so databases become `Acme Campaigns`, `Acme Work Orders`, etc.
 
-The installer warns that Worker secrets are passed through the Notion CLI command arguments. Confirm if they are comfortable continuing.
+The installer warns that Worker secrets may briefly appear in the local process list while Notion CLI saves them. Confirm if they are comfortable continuing.
 
 ## Step 5: Store Webhooks In Settings
 
-At the end, the installer prints webhook URLs and asks:
+At the end, the installer automatically saves webhook URLs in two places:
 
-```text
-Store these webhook URLs in the generated Settings page? [Y/n]
-```
-
-Choose `Y` for the demo.
+- The backend `Tiller Portal Config` database
+- A plain `Webhook URLs` section directly on the generated Settings page
 
 Then open Notion and show:
 
 - Setup checklist page
 - Generated portal page
 - Settings page
-- Stored webhook URLs
+- `Webhook URLs` section on Settings
 
 ## Step 6: Add Notion Automations
 

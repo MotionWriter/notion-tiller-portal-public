@@ -175,18 +175,10 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		cwd: workerDir,
 		message: "Getting Worker webhook URLs",
 	});
-	const webhookUrls = parseWebhookUrls(webhooks.stdout);
-	const foundWebhookNames = Object.keys(webhookUrls);
-	printInfo(`Found ${foundWebhookNames.length} Worker webhook URL${foundWebhookNames.length === 1 ? "" : "s"}: ${foundWebhookNames.join(", ") || "none"}.`);
+		const webhookUrls = parseWebhookUrls(webhooks.stdout);
+		const foundWebhookNames = Object.keys(webhookUrls);
+		printInfo(`Found ${foundWebhookNames.length} Worker webhook URL${foundWebhookNames.length === 1 ? "" : "s"}: ${foundWebhookNames.join(", ") || "none"}.`);
 
-	const rl = createPrompt();
-	const storeWebhookInfo = await askActionYesNoDefault(
-		rl,
-		"Store these webhook URLs in the generated Settings page? [Y/n] ",
-		true,
-	);
-	rl.close();
-	if (storeWebhookInfo) {
 		await runWithSpinner("ntn", [
 			"workers",
 			"exec",
@@ -195,29 +187,18 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 			JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, writeSetupChecklist: true })),
 			"--workers-config-file",
 			workersConfig,
-		], { cwd: workerDir, allowFail: true, message: "Writing webhooks to Settings page" });
-	} else {
-		await runWithSpinner("ntn", [
-			"workers",
-			"exec",
-			"setupWorkspace",
-			"-d",
-			JSON.stringify(setupPayload({ parentPageId, portalName, databasePrefix, writeSetupChecklist: true })),
-			"--workers-config-file",
-			workersConfig,
-		], { cwd: workerDir, allowFail: true, message: "Writing setup checklist" });
-	}
-	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
+		], { cwd: workerDir, allowFail: true, message: "Saving webhook URLs to Settings page" });
+		writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
 
-	printSection("Done", "Install complete");
-	console.log(`Portal page ID: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
+		printSection("Done", "Install complete");
+		console.log(`Portal page ID: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
 	console.log("\nWebhook URLs:");
-	printWebhookUrls(webhookUrls);
-	console.log("\nNext:");
-	console.log("1. Open Settings in Notion.");
-	console.log("2. Add database automations using the stored webhook instructions.");
-	console.log(`3. Run: ${cliCommand} doctor`);
-}
+		printWebhookUrls(webhookUrls);
+		console.log("\nNext:");
+		console.log("1. Open Settings in Notion.");
+		console.log("2. Use the Webhook URLs section to add database automations.");
+		console.log(`3. Run: ${cliCommand} doctor`);
+	}
 
 function setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, writeSetupChecklist }) {
 	return {
@@ -664,8 +645,9 @@ async function printSecretCommandWarning() {
 	console.log("");
 	console.log(color.bold("Security note:"));
 	console.log(color.dim("The Notion CLI currently sets Worker environment values through command arguments."));
-	console.log(color.dim("Secrets can briefly appear in your shell history or local process list while they are being saved."));
-	console.log(color.dim("They are not stored in Notion pages or in this installer state.\n"));
+	console.log(color.dim("During setup, secrets may briefly appear in your local process list."));
+	console.log(color.dim("If you manually run env commands, they may also appear in shell history."));
+	console.log(color.dim("They are not stored in Notion pages or this installer's local state.\n"));
 	await sleep(1800);
 }
 
