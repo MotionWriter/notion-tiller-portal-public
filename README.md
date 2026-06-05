@@ -26,7 +26,7 @@ Create the Notion token at [Notion internal integrations](https://www.notion.so/
 
 - Portal page under the setup page
 - Settings page
-- Templates, Work Orders, Campaigns, Campaign Data Rows, Template Data Tables, Render Outputs, Uploads, and Config databases
+- Templates, Work Orders, Campaigns, Template Data Tables, Render Outputs, Uploads, and Config databases
 - Focused views like `Add New Template` and `Start Workorder`
 - Setup checklist on the setup page
 - Notion Worker and webhook URLs

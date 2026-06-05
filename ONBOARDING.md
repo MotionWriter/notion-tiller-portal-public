@@ -8,7 +8,7 @@ By the end, they will have:
 
 - A Notion portal page
 - Settings page
-- Templates, Work Orders, Campaigns, Campaign Data Rows, Template Data Tables, Render Outputs, Uploads, and Config databases
+- Templates, Work Orders, Campaigns, Template Data Tables, Render Outputs, Uploads, and Config databases
 - Focused views like `Add New Template` and `Start Workorder`
 - A Notion Worker deployed in their workspace
 - Webhook URLs for Notion automations

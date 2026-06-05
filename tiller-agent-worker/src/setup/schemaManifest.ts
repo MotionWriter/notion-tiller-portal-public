@@ -13,7 +13,6 @@ export type DatabaseKey =
 	| "templates"
 	| "workOrders"
 	| "campaigns"
-	| "campaignDataRows"
 	| "templateDataTableIndex"
 	| "renderOutputs"
 	| "uploads"
@@ -155,19 +154,6 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 		],
 	},
 	{
-		key: "campaignDataRows",
-		name: "Tiller Campaign Data Rows",
-		placement: "portal",
-		creatorFacing: true,
-		properties: [
-			{ name: "_Row", type: "title" },
-			{ name: "_Campaign", type: "relation", relationTo: "campaigns" },
-			{ name: "_Include in Render", type: "checkbox" },
-			{ name: "_Row Status", type: "select", options: ["Draft", "Valid", "Invalid", "Rendered"] },
-			{ name: "_Output Name", type: "rich_text" },
-		],
-	},
-	{
 		key: "templateDataTableIndex",
 		name: "Tiller Template Data Tables",
 		placement: "templateDataTables",
@@ -239,7 +225,6 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 			{ name: "Templates Data Source ID", type: "rich_text" },
 			{ name: "Work Orders Data Source ID", type: "rich_text" },
 			{ name: "Campaigns Data Source ID", type: "rich_text" },
-			{ name: "Campaign Data Rows Data Source ID", type: "rich_text" },
 			{ name: "Template Data Table Index Data Source ID", type: "rich_text" },
 			{ name: "Render Outputs Data Source ID", type: "rich_text" },
 			{ name: "Uploads Data Source ID", type: "rich_text" },

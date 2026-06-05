@@ -19,7 +19,6 @@ const DATA_SOURCE_ENV: Record<PortalDataSourceKey, string> = {
 	templates: "TEMPLATES_DATA_SOURCE_ID",
 	workOrders: "WORK_ORDERS_DATA_SOURCE_ID",
 	campaigns: "CAMPAIGNS_DATA_SOURCE_ID",
-	campaignDataRows: "CAMPAIGN_DATA_ROWS_DATA_SOURCE_ID",
 	templateDataTableIndex: "TEMPLATE_DATA_TABLE_INDEX_DATA_SOURCE_ID",
 	renderOutputs: "RENDER_OUTPUTS_DATA_SOURCE_ID",
 	uploads: "UPLOADS_DATA_SOURCE_ID",
@@ -29,7 +28,6 @@ const CONFIG_PROPERTY_BY_KEY: Record<PortalDataSourceKey, string> = {
 	templates: "Templates Data Source ID",
 	workOrders: "Work Orders Data Source ID",
 	campaigns: "Campaigns Data Source ID",
-	campaignDataRows: "Campaign Data Rows Data Source ID",
 	templateDataTableIndex: "Template Data Table Index Data Source ID",
 	renderOutputs: "Render Outputs Data Source ID",
 	uploads: "Uploads Data Source ID",
@@ -295,7 +293,7 @@ worker.tool("scanPendingWorkOrders", {
 worker.tool("buildCampaignCsv", {
 	title: "Build Campaign CSV",
 	description:
-		"Generate a CSV from linked Campaign Data Rows and write it back to the Campaign page for review.",
+		"Generate a CSV from the linked Template's data rows database and write it back to the Campaign page for review.",
 	schema: j.object({
 		pageId: j.string().describe("The Notion Campaign page ID to build CSV for."),
 	}),
@@ -415,7 +413,7 @@ worker.tool("submitTemplate", {
 worker.tool("syncTemplateDataTable", {
 	title: "Sync Template Data Table",
 	description:
-		"Create or repair a template-specific Campaign Data Rows database from the CSV parameters stored in Template Details.",
+		"Create or repair a template-specific data rows database from the CSV parameters stored in Template Details.",
 	schema: j.object({
 		pageId: j.string().describe("The Notion Templates page ID to sync."),
 	}),
@@ -847,15 +845,16 @@ async function validateCampaignFromPage({
 		if (csvColumns.length === 0) errors.push("Linked Template is missing CSV Columns.");
 	}
 
-	const rowsDataSourceLabel = template?.dataRowsDatabaseId
-		? `the template data rows database for "${template.name || "this template"}"`
-		: "Campaign Data Rows";
-	const rows: CampaignDataRowSummary[] = csvColumns.length > 0
+	if (csvColumns.length > 0 && !template?.dataRowsDatabaseId) {
+		errors.push("Linked Template does not have a data rows database yet. Open the Template, set Action to Sync Data Table, then add campaign rows to that template-specific database.");
+	}
+	const rowsDataSourceLabel = `the template data rows database for "${template?.name || "this template"}"`;
+	const rows: CampaignDataRowSummary[] = csvColumns.length > 0 && template?.dataRowsDatabaseId
 		? await queryCampaignDataRows({
 			notion,
 			campaignPageId: pageId,
 			csvColumns,
-			dataSourceId: template?.dataRowsDatabaseId || "",
+			dataSourceId: template?.dataRowsDatabaseId,
 		})
 		: [];
 	await setPageProgress(notion, pageId, 50, "Checking Rows", "Checking included campaign rows.");
@@ -1685,7 +1684,6 @@ function displayDataSourceKey(key: PortalDataSourceKey) {
 		templates: "Template",
 		workOrders: "Work Order",
 		campaigns: "Campaign",
-		campaignDataRows: "Campaign Data Rows",
 		templateDataTableIndex: "Template Data Table Index",
 		renderOutputs: "Render Outputs",
 		uploads: "Uploads",
@@ -3740,14 +3738,14 @@ async function queryCampaignDataRows({
 	notion: any;
 	campaignPageId: string;
 	csvColumns: string[];
-	dataSourceId?: string;
-}) {
-	const resolvedDataSourceId = dataSourceId || await getDataSourceId(notion, "campaignDataRows");
-	const rows: CampaignDataRowSummary[] = [];
-	let cursor: string | undefined;
-	do {
-		const response = await notion.dataSources.query({
-			data_source_id: resolvedDataSourceId,
+		dataSourceId: string;
+	}) {
+		if (!dataSourceId) throw new Error("Template data rows database is missing. Open the linked Template and run Sync Data Table.");
+		const rows: CampaignDataRowSummary[] = [];
+		let cursor: string | undefined;
+		do {
+			const response = await notion.dataSources.query({
+				data_source_id: dataSourceId,
 			page_size: 100,
 			...(cursor ? { start_cursor: cursor } : {}),
 		});

@@ -85,21 +85,6 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		visibleProperties: ["Name", "Render Outputs", "Work Order", "Template", "CSV Row Count", "Campaign Status", "Last Synced At"],
 	},
 	{
-		key: "campaignDataRows",
-		name: "All Rows",
-		type: "table",
-		visibleProperties: ["_Row", "_Campaign", "_Include in Render", "_Row Status"],
-		includeCsvProperties: true,
-	},
-	{
-		key: "campaignDataRows",
-		name: "Rows Included in Render",
-		type: "table",
-		filter: { property: "_Include in Render", checkbox: { equals: true } },
-		visibleProperties: ["_Row", "_Campaign", "_Include in Render", "_Row Status"],
-		includeCsvProperties: true,
-	},
-	{
 		key: "templates",
 		name: "Add New Template",
 		type: "table",
@@ -198,10 +183,6 @@ const LEGACY_VIEW_NAMES: Partial<Record<DatabaseKey, Record<string, string[]>>> 
 	campaigns: {
 		"Open Campaigns": ["Active Campaigns"],
 		"Ready - Submit Render": ["Ready to Render"],
-	},
-	campaignDataRows: {
-		"All Rows": ["By Campaign"],
-		"Rows Included in Render": ["Included Rows"],
 	},
 	workOrders: {
 		"Start Work Order": ["Start Workorder"],
@@ -667,7 +648,6 @@ async function upsertConfigRow({
 		"Templates Data Source ID": richTextValue(refs.templates?.dataSourceId ?? ""),
 		"Work Orders Data Source ID": richTextValue(refs.workOrders?.dataSourceId ?? ""),
 		"Campaigns Data Source ID": richTextValue(refs.campaigns?.dataSourceId ?? ""),
-		"Campaign Data Rows Data Source ID": richTextValue(refs.campaignDataRows?.dataSourceId ?? ""),
 		"Template Data Table Index Data Source ID": richTextValue(refs.templateDataTableIndex?.dataSourceId ?? ""),
 		"Render Outputs Data Source ID": richTextValue(refs.renderOutputs?.dataSourceId ?? ""),
 		"Uploads Data Source ID": richTextValue(refs.uploads?.dataSourceId ?? ""),
@@ -711,7 +691,6 @@ async function appendPortalNavigation(
 				linkedParagraphBlock("Template Data Tables", notionPageUrl(templateDataTablesPageId)),
 			]),
 			calloutBlock("Campaign outputs", "gray_background", [
-				linkedParagraphBlock("Campaign Data Rows", refs.campaignDataRows?.url),
 				linkedParagraphBlock("Render Outputs", refs.renderOutputs?.url),
 			]),
 			calloutBlock("Settings", "red_background", [
@@ -767,7 +746,7 @@ async function appendSetupInstructions(
 			block_id: settingsPageId,
 			children: [
 				headingBlock("Campaign data setup"),
-				paragraphBlock("Campaign Data Rows use underscore fields for portal control: _Row, _Campaign, _Include in Render, _Row Status, and _Output Name. Your CSV columns should be exact template field names like Name, Title, Background, or any other Tiller CSV column. Templates can also generate their own data rows tables with Sync Data Table. Those tables live in the Template Data Tables area so they are easy to find from the portal."),
+				paragraphBlock("Each Template owns its own data rows database. Open a Template and set Action to Sync Data Table to create that database from Tiller CSV Columns. Add campaign rows there, link _Campaign to the Campaign, check _Include in Render, and keep CSV column names exactly matched to the Template."),
 				paragraphBlock("Templates, Work Orders, and Campaigns have _Progress, _Milestone, and _Progress Note fields for live action feedback. Keep these near Action in your views."),
 			],
 		});
