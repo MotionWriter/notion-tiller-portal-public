@@ -275,14 +275,12 @@ export async function setupWorkspace({
 		configDataSourceId: refs.config?.dataSourceId ?? "",
 		refs,
 		webhookUrls: input.webhookUrls ?? {},
-		});
-		await appendSetupInstructions(notion, settingsPageId, refs);
-		await appendWebhookUrlInstructions(notion, settingsPageId, input.webhookUrls ?? {});
-		if (input.writeSetupChecklist !== false) {
-			await appendSetupChecklist(notion, parentPageId, {
-				portalPageId,
-			settingsPageId,
-			templateDataTablesPageId,
+	});
+	await appendPortalNavigation(notion, portalPageId, settingsPageId, templateDataTablesPageId, refs);
+	await appendSetupInstructions(notion, settingsPageId, refs);
+	await appendWebhookUrlInstructions(notion, settingsPageId, input.webhookUrls ?? {});
+	if (input.writeSetupChecklist !== false) {
+		await appendSetupChecklist(notion, parentPageId, {
 			storedWebhookUrls: Boolean(Object.keys(input.webhookUrls ?? {}).length),
 		});
 	}
@@ -690,6 +688,39 @@ async function upsertConfigRow({
 	});
 }
 
+async function appendPortalNavigation(
+	notion: any,
+	portalPageId: string,
+	settingsPageId: string,
+	templateDataTablesPageId: string,
+	refs: Partial<Record<DatabaseKey, DataSourceRef>>,
+) {
+	const existing = await findChildByTitle(notion, portalPageId, "Portal navigation", "heading_2");
+	if (existing?.id) return;
+
+	await notion.blocks.children.append({
+		block_id: portalPageId,
+		children: [
+			headingBlock("Portal navigation"),
+			calloutBlock("Campaigns (primary)", "yellow_background", [
+				linkedParagraphBlock("Campaigns", refs.campaigns?.url),
+			]),
+			calloutBlock("Build assets", "blue_background", [
+				linkedParagraphBlock("Templates", refs.templates?.url),
+				linkedParagraphBlock("Work Orders", refs.workOrders?.url),
+				linkedParagraphBlock("Template Data Tables", notionPageUrl(templateDataTablesPageId)),
+			]),
+			calloutBlock("Campaign outputs", "gray_background", [
+				linkedParagraphBlock("Campaign Data Rows", refs.campaignDataRows?.url),
+				linkedParagraphBlock("Render Outputs", refs.renderOutputs?.url),
+			]),
+			calloutBlock("Settings", "red_background", [
+				linkedParagraphBlock("Settings", notionPageUrl(settingsPageId)),
+			]),
+		],
+	});
+}
+
 async function appendSetupInstructions(
 	notion: any,
 	settingsPageId: string,
@@ -778,14 +809,8 @@ async function appendSetupChecklist(
 	notion: any,
 	parentPageId: string,
 	{
-		portalPageId,
-		settingsPageId,
-		templateDataTablesPageId,
 		storedWebhookUrls,
 	}: {
-		portalPageId: string;
-		settingsPageId: string;
-		templateDataTablesPageId: string;
 		storedWebhookUrls: boolean;
 	},
 ) {
@@ -805,9 +830,6 @@ async function appendSetupChecklist(
 			toDoBlock("Create Notion automations for Templates, Work Orders, and Campaigns", false),
 			toDoBlock("Run the doctor command from Settings", false),
 			toDoBlock("Use Add New Template, Start Work Order, or Ready - Submit Render for daily input", false),
-			paragraphBlock(`Portal page ID: ${portalPageId}`),
-			paragraphBlock(`Settings page ID: ${settingsPageId}`),
-			paragraphBlock(`Template Data Tables page ID: ${templateDataTablesPageId}`),
 		],
 	});
 }
@@ -840,6 +862,16 @@ function richText(content: string) {
 	return [{ type: "text", text: { content } }];
 }
 
+function linkedText(content: string, url?: string) {
+	return [{
+		type: "text",
+		text: {
+			content,
+			...(url ? { link: { url } } : {}),
+		},
+	}];
+}
+
 function titleValue(content: string) {
 	return { title: richText(content) };
 }
@@ -853,6 +885,14 @@ function paragraphBlock(content: string) {
 		object: "block",
 		type: "paragraph",
 		paragraph: { rich_text: richText(content) },
+	};
+}
+
+function linkedParagraphBlock(content: string, url?: string) {
+	return {
+		object: "block",
+		type: "paragraph",
+		paragraph: { rich_text: linkedText(content, url) },
 	};
 }
 
@@ -884,4 +924,20 @@ function codeBlock(content: string) {
 			rich_text: richText(content),
 		},
 	};
+}
+
+function calloutBlock(content: string, color: string, children: unknown[]) {
+	return {
+		object: "block",
+		type: "callout",
+		callout: {
+			rich_text: richText(content),
+			color,
+			children,
+		},
+	};
+}
+
+function notionPageUrl(id: string) {
+	return id ? `https://www.notion.so/${id.replace(/-/g, "")}` : undefined;
 }

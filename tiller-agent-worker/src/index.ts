@@ -10,6 +10,7 @@ export default worker;
 const DEFAULT_TILLER_API_BASE = "https://tiller.work/api/wo";
 const DEFAULT_MAX_DRIVE_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const WORK_ORDER_STATUS_PROPERTY = "Render Status";
+const CLI_CREDENTIALS_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials";
 const insecureTillerAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 type PortalDataSourceKey = Exclude<DatabaseKey, "config">;
@@ -846,6 +847,9 @@ async function validateCampaignFromPage({
 		if (csvColumns.length === 0) errors.push("Linked Template is missing CSV Columns.");
 	}
 
+	const rowsDataSourceLabel = template?.dataRowsDatabaseId
+		? `the template data rows database for "${template.name || "this template"}"`
+		: "Campaign Data Rows";
 	const rows: CampaignDataRowSummary[] = csvColumns.length > 0
 		? await queryCampaignDataRows({
 			notion,
@@ -858,7 +862,7 @@ async function validateCampaignFromPage({
 	const includedRows = rows
 		.filter((row) => row.include);
 	if (csvColumns.length > 0 && includedRows.length === 0) {
-		errors.push("Campaign has no included Campaign Data Rows.");
+		errors.push(`No included rows were found in ${rowsDataSourceLabel}. Add rows there, set _Campaign to this Campaign, and check _Include in Render.`);
 	}
 
 	const invalidRows = includedRows
@@ -4373,14 +4377,17 @@ function formatUserFacingError(error: unknown) {
 	}
 	const missingSecret = message.match(/^Missing worker secret: ([A-Z0-9_]+)$/);
 	if (missingSecret) {
-		return `Worker setup is missing ${missingSecret[1]}. Run the credentials setup, then try again.`;
+		return `Worker setup is missing ${missingSecret[1]}. Run this in Terminal, then try again: ${CLI_CREDENTIALS_COMMAND}`;
 	}
 	const tillerStatus = message.match(/^Tiller API error (\d+)/);
 	if (tillerStatus) {
+		if (["401", "403"].includes(tillerStatus[1])) {
+			return `Tiller authentication failed. Run this in Terminal to update email/password, then try again: ${CLI_CREDENTIALS_COMMAND}`;
+		}
 		return `Tiller rejected this request (HTTP ${tillerStatus[1]}). Check the row details and Tiller status, then try again.`;
 	}
 	if (message.startsWith("Fetch failed for ")) {
-		return "Could not connect to Tiller or a linked file. Check credentials, network access, and file links, then try again.";
+		return `Could not connect to Tiller or a linked file. Check network access and file links. If Tiller login changed, run: ${CLI_CREDENTIALS_COMMAND}`;
 	}
 	if (message.includes("already running") || message.includes("already picked up")) {
 		return message;
