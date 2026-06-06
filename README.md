@@ -26,6 +26,7 @@ Create the Notion token at [Notion internal integrations](https://www.notion.so/
 
 - Portal page under the setup page
 - How to Use page with workflow SOP and Mermaid flow chart
+- Resources page that stores grouped database pages out of the main portal view
 - Settings page
 - Templates, Work Orders, Campaigns, Template Data Tables, Render Outputs, Uploads, and Config databases
 - Focused views like `Add New Template` and `Start Workorder`

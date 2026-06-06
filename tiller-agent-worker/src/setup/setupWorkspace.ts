@@ -29,6 +29,7 @@ type SetupWorkspaceResult = {
 	dryRun: boolean;
 	parentPageId: string;
 	portalPageId: string;
+	resourcePageId: string;
 	howToUsePageId: string;
 	settingsPageId: string;
 	templateDataTablesPageId: string;
@@ -212,6 +213,7 @@ export async function setupWorkspace({
 			dryRun,
 			parentPageId,
 			portalPageId: "",
+			resourcePageId: "",
 			howToUsePageId: "",
 			settingsPageId: "",
 			templateDataTablesPageId: "",
@@ -228,18 +230,24 @@ export async function setupWorkspace({
 	const portalTitle = cleanName(input.portalName) || PORTAL_PAGE_TITLE;
 	const databasePrefix = cleanName(input.databasePrefix) || "Tiller";
 	const portalPageId = await findOrCreateChildPage(notion, parentPageId, portalTitle, created);
-	const howToUsePageId = await findOrCreateChildPage(notion, portalPageId, "How to Use", created);
-	const settingsPageId = await findOrCreateChildPage(notion, portalPageId, SETTINGS_PAGE_TITLE, created);
-	const templateDataTablesPageId = await findOrCreateChildPage(notion, portalPageId, "Template Data Tables", created);
+	const resourcePageId = await findOrCreateChildPage(notion, parentPageId, `${portalTitle} Resources`, created);
+	const howToUsePageId = await findOrCreateChildPage(notion, resourcePageId, "How to Use", created);
+	const campaignsPageId = await findOrCreateChildPage(notion, resourcePageId, "Campaigns", created);
+	const buildAssetsPageId = await findOrCreateChildPage(notion, resourcePageId, "Build Assets", created);
+	const outputsPageId = await findOrCreateChildPage(notion, resourcePageId, "Campaign Outputs", created);
+	const settingsPageId = await findOrCreateChildPage(notion, resourcePageId, SETTINGS_PAGE_TITLE, created);
+	const templateDataTablesPageId = await findOrCreateChildPage(notion, buildAssetsPageId, "Template Data Tables", created);
 
 	const refs: Partial<Record<DatabaseKey, DataSourceRef>> = {};
 	for (const spec of DATABASE_SPECS) {
-		const parentId =
-			spec.placement === "settings"
-				? settingsPageId
-				: spec.placement === "templateDataTables"
-					? templateDataTablesPageId
-					: portalPageId;
+		const parentId = databaseParentIdForSpec(spec, {
+			campaignsPageId,
+			buildAssetsPageId,
+			outputsPageId,
+			settingsPageId,
+			templateDataTablesPageId,
+			fallbackPageId: resourcePageId,
+		});
 		refs[spec.key] = await findOrCreateDatabase(notion, parentId, spec, displayDatabaseName(spec, databasePrefix), created);
 	}
 
@@ -275,6 +283,7 @@ export async function setupWorkspace({
 			dryRun,
 			parentPageId,
 			portalPageId,
+			resourcePageId,
 			howToUsePageId,
 			settingsPageId,
 		templateDataTablesPageId,
@@ -333,6 +342,25 @@ async function findOrCreateDatabase(
 	if (!dataSourceId) throw new Error(`Created database ${databaseName} has no data source.`);
 	created.push(`database:${databaseName}`);
 	return { databaseId: database.id, dataSourceId, url: database.url ?? "" };
+}
+
+function databaseParentIdForSpec(
+	spec: DatabaseSpec,
+	pages: {
+		campaignsPageId: string;
+		buildAssetsPageId: string;
+		outputsPageId: string;
+		settingsPageId: string;
+		templateDataTablesPageId: string;
+		fallbackPageId: string;
+	},
+) {
+	if (spec.placement === "settings") return pages.settingsPageId;
+	if (spec.placement === "templateDataTables") return pages.templateDataTablesPageId;
+	if (spec.key === "campaigns") return pages.campaignsPageId;
+	if (spec.key === "templates" || spec.key === "workOrders") return pages.buildAssetsPageId;
+	if (spec.key === "renderOutputs") return pages.outputsPageId;
+	return pages.fallbackPageId;
 }
 
 async function repairDatabaseProperties(
