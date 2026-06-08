@@ -50,12 +50,16 @@ async function main() {
 		await updateCredentials();
 		return;
 	}
+	if (command === "google-drive") {
+		await updateGoogleDriveCredentials();
+		return;
+	}
 	if (command === "onboarding") {
 		await runOnboarding();
 		return;
 	}
 	if (command !== "install") {
-		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", or "onboarding".`);
+		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", "google-drive", or "onboarding".`);
 	}
 
 	console.log(color.bold("Notion Tiller Portal installer"));
@@ -313,6 +317,59 @@ async function updateCredentials() {
 	}
 
 	console.log("\nCredentials updated. Run doctor to verify:");
+	console.log(`${cliCommand} doctor`);
+}
+
+async function updateGoogleDriveCredentials() {
+	console.log("Notion Tiller Portal Google Drive\n");
+	console.log("Use this for Drive asset folders and optional Drive output uploads.\n");
+	checkCommand("ntn", ["--version"], "Notion CLI missing.");
+	ensureNotionLogin();
+
+	const workersConfig = path.join(workerDir, "workers.json");
+	if (!existsSync(workersConfig)) {
+		throw new Error("No deployed Worker found. Run install first.");
+	}
+	const workerId = readWorkerId(workersConfig);
+	console.log(`Updating Worker ${workerId}.`);
+
+	const rl = createPrompt();
+	const updates = [];
+
+	printSection("Google Drive", "Public folder links");
+	printInfo("Use this when users paste an anyone-with-link Google Drive folder URL into Notion.");
+	if (await askYesNo(rl, "Set Google Drive API key? [y/N] ")) {
+		updates.push(["GOOGLE_DRIVE_API_KEY", await askHidden(rl, "Google Drive API key: ")]);
+	}
+
+	printSection("Google Drive", "Private folders and output uploads");
+	printInfo("Use this when the Worker needs access through a Google account.");
+	if (await askYesNo(rl, "Set Google Drive OAuth client/refresh token? [y/N] ")) {
+		updates.push(["GOOGLE_DRIVE_CLIENT_ID", await ask(rl, "Google Drive client ID: ")]);
+		updates.push(["GOOGLE_DRIVE_CLIENT_SECRET", await askHidden(rl, "Google Drive client secret: ")]);
+		updates.push(["GOOGLE_DRIVE_REFRESH_TOKEN", await askHidden(rl, "Google Drive refresh token: ")]);
+	}
+
+	if (await askYesNo(rl, "Set max Google Drive download bytes? [y/N] ")) {
+		updates.push(["MAX_DRIVE_DOWNLOAD_BYTES", await ask(rl, "Max bytes, e.g. 104857600: ")]);
+	}
+
+	if (updates.length === 0) {
+		rl.close();
+		console.log("No Google Drive changes made.");
+		return;
+	}
+
+	await printSecretCommandWarning();
+	const confirm = await askActionYesNoDefault(rl, "Apply Google Drive Worker env updates? [y/N] ", false);
+	rl.close();
+	if (!confirm) throw new Error("Stopped before setting Google Drive credentials.");
+
+	for (const [name, value] of updates) {
+		setWorkerEnv(workersConfig, name, value);
+	}
+
+	console.log("\nGoogle Drive updated. Run doctor to verify:");
 	console.log(`${cliCommand} doctor`);
 }
 

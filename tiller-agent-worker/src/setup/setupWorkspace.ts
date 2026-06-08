@@ -743,6 +743,8 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			headingBlock("Fix credentials"),
 			paragraphBlock("If Tiller login fails, run this in Terminal:"),
 			codeBlock(`${CLI_COMMAND} credentials`),
+			paragraphBlock("If Google Drive asset links or output uploads fail, run this in Terminal:"),
+			codeBlock(`${CLI_COMMAND} google-drive`),
 		],
 	});
 }
@@ -797,6 +799,8 @@ async function appendSetupInstructions(
 				paragraphBlock("Tiller and Notion secrets are stored on the Worker. Do not store passwords in Notion database fields."),
 				paragraphBlock("To update Tiller login or other credentials later, run this in Terminal:"),
 				codeBlock(`${CLI_COMMAND} credentials`),
+				paragraphBlock("To update Google Drive public folder links, private folders, or output uploads, run this in Terminal:"),
+				codeBlock(`${CLI_COMMAND} google-drive`),
 				paragraphBlock("To check the install, run this in Terminal:"),
 				codeBlock(`${CLI_COMMAND} doctor`),
 			],

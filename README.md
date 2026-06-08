@@ -63,6 +63,12 @@ Change credentials:
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials
 ```
 
+Set up Google Drive:
+
+```sh
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal google-drive
+```
+
 ## Google Drive Assets
 
 Templates and Work Orders can use `Template Assets URL` as a Google Drive folder link.
@@ -71,7 +77,7 @@ Templates and Work Orders can use `Template Assets URL` as a Google Drive folder
 - Private folder links use Google Drive OAuth env values.
 - Notion file uploads still work for smaller asset sets.
 
-Run `credentials` to add or update these values.
+Run `google-drive` to add or update these values.
 
 ## After Install
 
