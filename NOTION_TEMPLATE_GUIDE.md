@@ -124,6 +124,8 @@ There is no built-in Google OAuth popup yet. Current setup is manual.
 | Private Drive folder | Folders that should stay private. | Google client ID, client secret, refresh token. | `Template Assets URL` |
 | Notion uploads | Small asset sets and simple tests. | File attachments in Upload rows. | Uploads database rows |
 
+Mixed sources are supported. If an Upload row has a Notion attachment, the Worker uploads that attachment first. If an Upload row has no attachment, the Worker tries to match a file from `Template Assets URL`. It only confirms the Tiller upload phase after every required row is ready.
+
 Public folder flow:
 
 1. Share the Drive folder as anyone with link can view.

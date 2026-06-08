@@ -2526,174 +2526,50 @@ async function finalizeTemplateAssets({
 
 	const templatePage = await notion.pages.retrieve({ page_id: pageId });
 	const templateSummary = summarizeNotionTemplatePage(templatePage);
-	const missingFiles = uploadRows.filter((row: UploadRow) => row.files.length === 0);
-	if (missingFiles.length > 0) {
-		await setPageProgress(notion, pageId, 70, "Uploading Assets", "Looking for template assets.");
-		if (templateSummary.templateAssetsUrl) {
-			const driveFiles = await listPublicDriveFolderFiles(templateSummary.templateAssetsUrl);
-			const driveMatches = matchDriveFilesToUploadRows(driveFiles, missingFiles);
-			const missingAfterDrive = missingFiles.filter((row: UploadRow) => !driveMatches.has(row.pageId));
-			if (driveMatches.size > 0) {
-				const uploadedFromDrive = [];
-				for (const row of missingFiles) {
-					const match = driveMatches.get(row.pageId);
-					if (!match) continue;
-					const file = await fetchDriveBinaryFile(match);
-					await client.uploadMultipart(
-						`/template/${templateId}/asset`,
-						row.tillerPath,
-						file,
-					);
-					await notion.pages.update({
-						page_id: row.pageId,
-						properties: {
-							Ready: { checkbox: true },
-							"Uploaded At": { date: { start: new Date().toISOString() } },
-							"Last Error": richTextValue(""),
-						},
-					});
-					uploadedFromDrive.push({ pageId: row.pageId, tillerPath: row.tillerPath, driveFile: match.name });
-				}
-				if (missingAfterDrive.length === 0) {
-					await client.request("POST", `/template/${templateId}/asset/confirm`, { parse: "text" });
-					const status = await client.request("GET", `/template/${templateId}/status`);
-					const templateDetails = await buildTemplateSetupDetails(client, templateId, { status });
-					const statusTypes = getTemplateStatusTypes(status);
-					const isReady = statusTypes.includes("Ready");
-					const notionStatus = isReady ? "Ready" : "PendingAssets";
-					await notion.pages.update({
-						page_id: pageId,
-						properties: {
-							Action: { select: { name: "None" } },
-							Status: { select: { name: notionStatus } },
-							"Required Assets": richTextValue(isReady ? "" : safeJsonString(status)),
-							...formatTemplateDetailProperties(templateDetails),
-							"Tiller Response": richTextValue(
-								formatTemplateResponse({
-									status: statusTypes.join(", ") || "Unknown",
-									message: isReady
-										? "I found the matching files in Google Drive, uploaded them, and the template is Ready."
-										: "I found and uploaded the matching Google Drive files, but Tiller has not marked the template Ready yet.",
-								}),
-							),
-							"Last Synced At": { date: { start: new Date().toISOString() } },
-							"Last Error": richTextValue(isReady ? "" : `Template status: ${statusTypes.join(", ") || "Unknown"}`),
-						},
-					});
-					await setPageProgress(notion, pageId, isReady ? 100 : 85, isReady ? "Ready" : "Waiting on Assets", isReady ? "Template assets uploaded and ready." : "Template assets uploaded; waiting on Tiller.");
-					return {
-						ok: true,
-						pageId,
-						tillerTemplateId: templateId,
-						tillerStatus: statusTypes.join(", ") || "Unknown",
-						notionStatus,
-						uploadedRows: uploadedFromDrive,
-						missingRows: [],
-						message: "Template assets uploaded from Google Drive.",
-					};
-				}
-				await notion.pages.update({
-					page_id: pageId,
-					properties: {
-						Action: { select: { name: "None" } },
-						Status: { select: { name: "PendingAssets" } },
-						"Required Assets": richTextValue(
-							missingAfterDrive.map((row: UploadRow) => row.tillerPath || row.name).join("\n"),
-						),
-						"Tiller Response": richTextValue(
-							formatTemplateResponse({
-								status: "PendingAssets",
-								requiredAssets: missingAfterDrive.map((row: UploadRow) => row.tillerPath || row.name),
-								message: `I found ${uploadedFromDrive.length} matching file(s) in Google Drive, but some required assets are still missing. Check that the file names match exactly.`,
-							}),
-						),
-						"Last Error": richTextValue(""),
-					},
-				});
-				await setPageProgress(notion, pageId, 85, "Waiting on Assets", "Some required template assets are still missing.");
-				return {
-					ok: true,
-					pageId,
-					tillerTemplateId: templateId,
-					tillerStatus: "PendingAssets",
-					notionStatus: "PendingAssets",
-					uploadedRows: uploadedFromDrive,
-					missingRows: missingAfterDrive.map(rowSummary),
-					message: "Some template assets were uploaded from Google Drive; others are still missing.",
-				};
-			}
-		}
+	await setPageProgress(notion, pageId, 70, "Uploading Assets", "Uploading template assets from Notion and Google Drive.");
+	const templateUpload = await uploadRowsToTiller({
+		notion,
+		client,
+		parentKind: "template",
+		pageId,
+		phase: "template_asset",
+		uploadPath: `/template/${templateId}/asset`,
+		folderUrl: templateSummary.templateAssetsUrl,
+	});
+	if (templateUpload.missingRows.length > 0) {
 		await notion.pages.update({
 			page_id: pageId,
 			properties: {
 				Action: { select: { name: "None" } },
 				Status: { select: { name: "PendingAssets" } },
 				"Required Assets": richTextValue(
-					missingFiles.map((row: UploadRow) => row.tillerPath || row.name).join("\n"),
+					templateUpload.missingRows.map((row: UploadRow) => row.tillerPath || row.name).join("\n"),
 				),
 				"Tiller Response": richTextValue(
 					formatTemplateResponse({
 						status: "PendingAssets",
-						requiredAssets: missingFiles.map((row: UploadRow) => row.tillerPath || row.name),
+						requiredAssets: templateUpload.missingRows.map((row: UploadRow) => row.tillerPath || row.name),
 						message: templateSummary.templateAssetsUrl
-							? "I could not find matching files in the Google Drive folder. Attach files to the listed Upload rows or fix the Drive folder contents, then use Push Update."
+							? `I uploaded ${templateUpload.uploaded.length} file(s), but some required assets are still missing. Attach files to the listed Upload rows or fix the Google Drive folder, then use Push Update.`
 							: "Attach files to the listed Upload rows, then use Push Update.",
 					}),
 				),
 				"Last Error": richTextValue(""),
 			},
 		});
+		await setPageProgress(notion, pageId, 85, "Waiting on Assets", "Some required template assets are still missing.");
 		return {
 			ok: true,
 			pageId,
 			tillerTemplateId: templateId,
 			tillerStatus: "PendingAssets",
 			notionStatus: "PendingAssets",
-			uploadedRows: [],
-			missingRows: missingFiles.map((row: UploadRow) => ({
-				pageId: row.pageId,
-				name: row.name,
-				tillerPath: row.tillerPath,
-				url: row.url,
-			})),
+			uploadedRows: templateUpload.uploaded,
+			missingRows: templateUpload.missingRows.map(rowSummary),
 			message: "Template assets still need attached files in Upload rows.",
 		};
 	}
-
-	const uploadedRows = [];
-	for (const row of uploadRows) {
-		try {
-			for (const part of buildUploadParts(row.tillerPath, row.files)) {
-				const file = await fetchNotionBinaryFile(part.file);
-				await client.uploadMultipart(
-					`/template/${templateId}/asset`,
-					part.uploadPath,
-					file,
-				);
-			}
-			await notion.pages.update({
-				page_id: row.pageId,
-				properties: {
-					Ready: { checkbox: true },
-					"Uploaded At": { date: { start: new Date().toISOString() } },
-					"Last Error": richTextValue(""),
-				},
-			});
-			uploadedRows.push({
-				pageId: row.pageId,
-				tillerPath: row.tillerPath,
-				fileCount: row.files.length,
-			});
-		} catch (error) {
-			await notion.pages.update({
-				page_id: row.pageId,
-				properties: {
-					"Last Error": richTextValue((error as Error)?.message ?? String(error)),
-				},
-			});
-			throw error;
-		}
-	}
+	const uploadedRows = templateUpload.uploaded;
 
 	await client.request("POST", `/template/${templateId}/asset/confirm`, { parse: "text" });
 	await setPageProgress(notion, pageId, 90, "Checking Assets", "Confirming uploaded template assets.");
@@ -2756,20 +2632,20 @@ async function finalizeWorkOrderInputs({
 	const client = new TillerClient();
 	await client.authenticate();
 	const workOrderId = summary.tillerWorkOrderId;
-	const uploadedParameters = await uploadRowsForPhase({
+	let uploadedParameters = (await uploadRowsToTiller({
 		notion,
 		client,
+		parentKind: "work_order",
 		pageId,
-		workOrderId,
 		phase: "parameter",
 		uploadPath: `/workorder/${workOrderId}/parameter`,
-	});
+		folderUrl: summary.templateAssetsUrl,
+	})).uploaded;
 
 	let parameterStatus = await client.request("GET", `/workorder/${workOrderId}/parameter`, {
 		allowStatus: [409],
 	});
 	let pendingParameters = getPendingItems(parameterStatus);
-	let uploadedParametersFromDrive: DriveUploadSummary[] = [];
 	if (pendingParameters.length === 0) {
 		await client.request("POST", `/workorder/${workOrderId}/parameter/confirm`, {
 			parse: "text",
@@ -2782,17 +2658,17 @@ async function finalizeWorkOrderInputs({
 			phase: "parameter",
 			items: pendingParameters,
 		});
-		uploadedParametersFromDrive = summary.templateAssetsUrl
-			? await uploadWorkOrderRowsFromDrive({
-				notion,
-				client,
-				pageId,
-				phase: "parameter",
-				uploadPath: `/workorder/${workOrderId}/parameter`,
-				folderUrl: summary.templateAssetsUrl,
-			})
-			: [];
-		if (uploadedParametersFromDrive.length > 0) {
+		const parameterUpload = await uploadRowsToTiller({
+			notion,
+			client,
+			parentKind: "work_order",
+			pageId,
+			phase: "parameter",
+			uploadPath: `/workorder/${workOrderId}/parameter`,
+			folderUrl: summary.templateAssetsUrl,
+		});
+		uploadedParameters = [...uploadedParameters, ...parameterUpload.uploaded];
+		if (parameterUpload.uploaded.length > 0) {
 			parameterStatus = await client.request("GET", `/workorder/${workOrderId}/parameter`, {
 				allowStatus: [409],
 			});
@@ -2815,7 +2691,7 @@ async function finalizeWorkOrderInputs({
 				tillerWorkOrderId: workOrderId,
 				tillerStatus: "PendingParameters",
 				notionStatus: "Pending Parameters",
-				uploadedParameters: [...uploadedParameters, ...uploadedParametersFromDrive],
+				uploadedParameters,
 				uploadedDynamicAssets: [],
 				createdUploadRows: created,
 				outputRows: [],
@@ -2831,7 +2707,7 @@ async function finalizeWorkOrderInputs({
 		allowStatus: [409],
 	});
 	let pendingDynamicAssets = getPendingItems(dynamicStatus);
-	let uploadedDynamicAssetsFromDrive: DriveUploadSummary[] = [];
+	let uploadedDynamicAssets: UploadedFileSummary[] = [];
 	if (pendingDynamicAssets.length > 0) {
 		await setPageProgress(notion, pageId, 65, "Uploading Assets", "Checking dynamic assets.");
 		const existingRows = await queryUploadRowsForParent({
@@ -2848,17 +2724,17 @@ async function finalizeWorkOrderInputs({
 				items: pendingDynamicAssets,
 			});
 		}
-		uploadedDynamicAssetsFromDrive = summary.templateAssetsUrl
-			? await uploadWorkOrderRowsFromDrive({
-				notion,
-				client,
-				pageId,
-				phase: "dynamic_asset",
-				uploadPath: `/workorder/${workOrderId}/dynamicasset`,
-				folderUrl: summary.templateAssetsUrl,
-			})
-			: [];
-		if (uploadedDynamicAssetsFromDrive.length > 0) {
+		const dynamicUpload = await uploadRowsToTiller({
+			notion,
+			client,
+			parentKind: "work_order",
+			pageId,
+			phase: "dynamic_asset",
+			uploadPath: `/workorder/${workOrderId}/dynamicasset`,
+			folderUrl: summary.templateAssetsUrl,
+		});
+		uploadedDynamicAssets = [...uploadedDynamicAssets, ...dynamicUpload.uploaded];
+		if (dynamicUpload.uploaded.length > 0) {
 			dynamicStatus = await client.request("GET", `/workorder/${workOrderId}/dynamicasset`, {
 				allowStatus: [409],
 			});
@@ -2889,8 +2765,8 @@ async function finalizeWorkOrderInputs({
 						tillerWorkOrderId: workOrderId,
 						tillerStatus: "PendingDynamicAssets",
 						notionStatus: "Pending Dynamic Assets",
-						uploadedParameters: [...uploadedParameters, ...uploadedParametersFromDrive],
-						uploadedDynamicAssets: uploadedDynamicAssetsFromDrive,
+						uploadedParameters,
+						uploadedDynamicAssets,
 						createdUploadRows: dynamicRows.map(rowSummary),
 						outputRows: [],
 						results: [],
@@ -2902,24 +2778,50 @@ async function finalizeWorkOrderInputs({
 		}
 	}
 
-	const uploadedDynamicAssets = await uploadRowsForPhase({
+	const remainingDynamicUpload = await uploadRowsToTiller({
 		notion,
 		client,
+		parentKind: "work_order",
 		pageId,
-		workOrderId,
 		phase: "dynamic_asset",
 		uploadPath: `/workorder/${workOrderId}/dynamicasset`,
+		folderUrl: summary.templateAssetsUrl,
 	});
+	uploadedDynamicAssets = [...uploadedDynamicAssets, ...remainingDynamicUpload.uploaded];
 	dynamicStatus = await client.request("GET", `/workorder/${workOrderId}/dynamicasset`, {
 		allowStatus: [409],
 	});
 	pendingDynamicAssets = getPendingItems(dynamicStatus);
-	if (pendingDynamicAssets.length === 0) {
-		await client.request("POST", `/workorder/${workOrderId}/dynamicasset/confirm`, {
-			parse: "text",
-			allowStatus: [409],
+	if (pendingDynamicAssets.length > 0) {
+		const dynamicRows = await queryUploadRowsForParent({
+			notion,
+			parentKind: "work_order",
+			parentPageId: pageId,
+			phase: "dynamic_asset",
+			ready: false,
 		});
+		await updateWorkOrderPending(notion, pageId, "Pending Dynamic Assets", pendingDynamicAssets);
+		await setPageProgress(notion, pageId, 85, "Waiting on Assets", "Dynamic assets are still needed.");
+		return {
+			ok: true,
+			pageId,
+			tillerWorkOrderId: workOrderId,
+			tillerStatus: "PendingDynamicAssets",
+			notionStatus: "Pending Dynamic Assets",
+			uploadedParameters,
+			uploadedDynamicAssets,
+			createdUploadRows: dynamicRows.map(rowSummary),
+			outputRows: [],
+			results: [],
+			message: summary.templateAssetsUrl
+				? "Some dynamic asset files are still missing. Check Template Assets URL or attach files to Upload rows, then run finalizeWorkOrderInputs again."
+				: "Attach dynamic asset files to Upload rows, then run finalizeWorkOrderInputs again.",
+		};
 	}
+	await client.request("POST", `/workorder/${workOrderId}/dynamicasset/confirm`, {
+		parse: "text",
+		allowStatus: [409],
+	});
 
 	await setPageProgress(notion, pageId, 80, "Waiting on Tiller", "Render is running in Tiller.");
 	const statusResult = await pollWorkOrderStatus(client, workOrderId, pollSeconds);
@@ -2962,8 +2864,8 @@ async function finalizeWorkOrderInputs({
 		tillerWorkOrderId: workOrderId,
 		tillerStatus: statusResult.status,
 		notionStatus,
-		uploadedParameters: [...uploadedParameters, ...uploadedParametersFromDrive],
-		uploadedDynamicAssets: [...uploadedDynamicAssets, ...uploadedDynamicAssetsFromDrive],
+		uploadedParameters,
+		uploadedDynamicAssets,
 		createdUploadRows: [],
 		outputRows,
 		results,
@@ -3384,50 +3286,10 @@ async function findTemplatePageIdByTillerId(notion: any, tillerTemplateId: numbe
 	return page?.id ?? "";
 }
 
-async function uploadRowsForPhase({
+async function uploadRowsToTiller({
 	notion,
 	client,
-	pageId,
-	phase,
-	uploadPath,
-}: {
-	notion: any;
-	client: TillerClient;
-	pageId: string;
-	workOrderId: number;
-	phase: "parameter" | "dynamic_asset";
-	uploadPath: string;
-}) {
-	const rows = await queryUploadRowsForParent({
-		notion,
-		parentKind: "work_order",
-		parentPageId: pageId,
-		phase,
-		ready: false,
-	});
-	const uploaded = [];
-	for (const row of rows) {
-		if (row.files.length === 0) continue;
-		for (const part of buildUploadParts(row.tillerPath, row.files)) {
-			const file = await fetchNotionBinaryFile(part.file);
-			await client.uploadMultipart(uploadPath, part.uploadPath, file);
-		}
-		await notion.pages.update({
-			page_id: row.pageId,
-			properties: {
-				Ready: { checkbox: true },
-				"Uploaded At": { date: { start: new Date().toISOString() } },
-				"Last Error": richTextValue(""),
-			},
-		});
-		uploaded.push({ pageId: row.pageId, tillerPath: row.tillerPath, fileCount: row.files.length });
-	}
-	return uploaded;
-}
-
-async function uploadWorkOrderRowsFromDrive({
-	notion,
-	client,
+	parentKind,
 	pageId,
 	phase,
 	uploadPath,
@@ -3435,38 +3297,85 @@ async function uploadWorkOrderRowsFromDrive({
 }: {
 	notion: any;
 	client: TillerClient;
+	parentKind: "work_order" | "template";
 	pageId: string;
-	phase: "parameter" | "dynamic_asset";
+	phase: "parameter" | "dynamic_asset" | "template_asset";
 	uploadPath: string;
-	folderUrl: string;
+	folderUrl?: string;
 }) {
 	const rows = await queryUploadRowsForParent({
 		notion,
-		parentKind: "work_order",
+		parentKind,
 		parentPageId: pageId,
 		phase,
 		ready: false,
 	});
-	if (rows.length === 0) return [];
-	const driveFiles = await listPublicDriveFolderFiles(folderUrl);
-	const driveMatches = matchDriveFilesToUploadRows(driveFiles, rows);
-	const uploaded = [];
+	if (rows.length === 0) return { uploaded: [], missingRows: [] };
+
+	const rowsNeedingDrive = rows.filter((row: UploadRow) => row.files.length === 0);
+	const driveMatches = folderUrl && rowsNeedingDrive.length > 0
+		? matchDriveFilesToUploadRows(await listPublicDriveFolderFiles(folderUrl), rowsNeedingDrive)
+		: new Map<string, DriveFile>();
+	const uploaded: UploadedFileSummary[] = [];
+	const missingRows: UploadRow[] = [];
+
 	for (const row of rows) {
-		const match = driveMatches.get(row.pageId);
-		if (!match) continue;
-		const file = await fetchDriveBinaryFile(match);
-		await client.uploadMultipart(uploadPath, row.tillerPath, file);
-		await notion.pages.update({
-			page_id: row.pageId,
-			properties: {
-				Ready: { checkbox: true },
-				"Uploaded At": { date: { start: new Date().toISOString() } },
-				"Last Error": richTextValue(""),
-			},
-		});
-		uploaded.push({ pageId: row.pageId, tillerPath: row.tillerPath, driveFile: match.name });
+		try {
+			if (row.files.length > 0) {
+				for (const part of buildUploadParts(row.tillerPath, row.files)) {
+					const file = await fetchNotionBinaryFile(part.file);
+					await client.uploadMultipart(uploadPath, part.uploadPath, file);
+				}
+				await markUploadRowReady(notion, row.pageId);
+				uploaded.push({
+					pageId: row.pageId,
+					tillerPath: row.tillerPath,
+					source: "notion",
+					fileCount: row.files.length,
+					driveFile: "",
+				});
+				continue;
+			}
+
+			const driveMatch = driveMatches.get(row.pageId);
+			if (driveMatch) {
+				const file = await fetchDriveBinaryFile(driveMatch);
+				await client.uploadMultipart(uploadPath, row.tillerPath, file);
+				await markUploadRowReady(notion, row.pageId);
+				uploaded.push({
+					pageId: row.pageId,
+					tillerPath: row.tillerPath,
+					source: "google_drive",
+					fileCount: null,
+					driveFile: driveMatch.name,
+				});
+				continue;
+			}
+
+			missingRows.push(row);
+		} catch (error) {
+			await notion.pages.update({
+				page_id: row.pageId,
+				properties: {
+					"Last Error": richTextValue((error as Error)?.message ?? String(error)),
+				},
+			});
+			throw error;
+		}
 	}
-	return uploaded;
+
+	return { uploaded, missingRows };
+}
+
+async function markUploadRowReady(notion: any, pageId: string) {
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Ready: { checkbox: true },
+			"Uploaded At": { date: { start: new Date().toISOString() } },
+			"Last Error": richTextValue(""),
+		},
+	});
 }
 
 async function ensureMissingUploadRows({
@@ -4203,9 +4112,11 @@ type DriveFile = {
 	relativePath?: string;
 };
 
-type DriveUploadSummary = {
+type UploadedFileSummary = {
 	pageId: string;
 	tillerPath: string;
+	source: "notion" | "google_drive";
+	fileCount: number | null;
 	driveFile: string;
 };
 
