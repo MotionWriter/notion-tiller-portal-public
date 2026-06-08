@@ -1,202 +1,260 @@
-# Tiller Portal Guide
+# Tiller Portal Template Guide
 
-This portal helps a motion designer or studio run Tiller renders from Notion. You manage Templates, Campaigns, Work Orders, and Render Outputs in one place. Terminal is only used for setup and credential updates.
+Use this guide as the customer-facing Notion template guide for a portable Tiller Portal. The portal lets a motion designer or studio run Tiller renders from Notion while keeping credentials in the Notion Worker environment, not in Notion pages.
 
-## Start Here
+## Quick Start
 
-| 1. Set up | 2. Build | 3. Render |
+| Step | User Action | Result |
 | --- | --- | --- |
-| Install the Worker, connect Notion, and save Tiller credentials. | Add a Template, sync its data table, and fill campaign rows. | Submit the Campaign. The Worker builds the CSV, creates the Work Order, and returns outputs. |
+| 1. Prepare Notion | Create one blank setup page and share it with a Notion internal integration. | Installer has a safe place to build. |
+| 2. Run installer | Paste the bootstrap command in Terminal. | Portal pages, databases, Worker, and webhooks are created. |
+| 3. Add automations | Add Notion database automations using webhook URLs from Settings. | Action changes can trigger Worker code. |
+| 4. Add Template | Upload a Cavalry file and set `Action` to `Add to Tiller`. | Tiller returns Template details and CSV columns. |
+| 5. Sync data table | Set Template `Action` to `Sync Data Table`. | Template-specific data rows database is created. |
+| 6. Submit render | Link Campaign rows, then set Campaign `Action` to `Submit Render`. | Worker builds CSV, submits Work Order, and returns outputs. |
 
 ## Portal Map
 
-| Area | What It Is For | When You Use It |
+| Area | Purpose | Daily Owner |
 | --- | --- | --- |
-| How to Use | Quick operating guide and workflow map. | First day and team handoff. |
-| Campaigns | Primary workspace for render jobs. | Most daily work starts here. |
-| Templates | Tiller template library. | Add or update Cavalry templates. |
-| Work Orders | Tiller jobs created from Campaigns. | Check render state or troubleshoot a job. |
-| Template Data Tables | Template-specific row databases. | Enter the CSV-driving data for a Template. |
-| Render Outputs | One finished output per row. | Review/download final files. |
-| Settings | Worker setup, webhook URLs, and support commands. | Setup, automations, credentials, diagnostics. |
+| How to Use | Operating SOP and workflow map. | Everyone. |
+| Campaigns | Main workspace for render jobs. | Producer, designer, or marketer. |
+| Templates | Tiller template library. | Motion designer. |
+| Template Data Tables | One data rows database per Template. | Person preparing campaign data. |
+| Work Orders | Tiller jobs and status checks. | Motion designer or operator. |
+| Render Outputs | One finished output per row. | Team reviewing final renders. |
+| Uploads | Template/work-order asset tracking rows. | Operator when Tiller needs assets. |
+| Settings | Webhook URLs, setup commands, support commands. | Admin/operator. |
 
 ## Workflow Map
 
 ```mermaid
 flowchart TD
-  A[Install portal] --> B[Add Template]
-  B --> C[Action: Add to Tiller]
-  C --> D{Template Ready?}
-  D -- No, needs assets --> E[Add assets]
-  E --> F[Action: Push Update]
-  F --> D
-  D -- Yes --> G[Action: Sync Data Table]
-  G --> H[Fill template data rows]
-  H --> I[Create Campaign and link Template]
-  I --> J{Review CSV first?}
-  J -- Yes --> K[Action: Build CSV]
-  K --> L[Review Generated CSV]
-  L --> M[Action: Submit Render]
-  J -- No --> M
-  M --> N[Worker creates CSV and Work Order]
-  N --> O[Tiller renders]
-  O --> P[Render Outputs attach in Notion]
+  A[Create setup page] --> B[Run installer]
+  B --> C[Add Notion automations]
+  C --> D[Add Template]
+  D --> E[Action: Add to Tiller]
+  E --> F{Template Ready?}
+  F -- Needs assets --> G[Add assets by Notion upload or Drive folder]
+  G --> H[Action: Push Update]
+  H --> F
+  F -- Ready --> I[Action: Sync Data Table]
+  I --> J[Fill Template data rows]
+  J --> K[Create Campaign and link Template]
+  K --> L{Review CSV first?}
+  L -- Yes --> M[Action: Build CSV]
+  M --> N[Review Generated CSV]
+  N --> O[Action: Submit Render]
+  L -- No --> O
+  O --> P[Worker validates and builds CSV]
+  P --> Q[Worker creates Tiller Work Order]
+  Q --> R[Tiller renders]
+  R --> S[Render Outputs attach in Notion]
 ```
 
-## Daily Use
+## Setup Requirements
 
-### Add a Template
-
-| Step | Do This | Result |
-| --- | --- | --- |
-| 1 | Open Templates. | Template library opens. |
-| 2 | Add a new row. | New Template draft. |
-| 3 | Add the Cavalry file in `Cav File`. | Worker has the scene file. |
-| 4 | Set `Action` to `Add to Tiller`. | Worker submits the Template to Tiller. |
-| 5 | Watch `_Milestone`, `_Progress`, and `_Progress Note`. | You see what is happening. |
-
-If Tiller reports missing assets, add the assets, then set `Action` to `Push Update`.
-
-### Add Template Assets
-
-Use one of these paths:
-
-| Path | Best For | What To Fill |
-| --- | --- | --- |
-| Notion upload rows | Small asset sets. | Attach files in Uploads rows, then use `Push Update`. |
-| Public Google Drive folder | Large shared asset folders. | Put an anyone-with-link folder URL in `Template Assets URL`. |
-| Google Drive OAuth | Private Drive folders or output uploads. | Run the Google Drive command and add OAuth values. |
-
-For public Google Drive folders, the Worker needs a Google Drive API key saved through the Google Drive command. For private folders, save Google Drive OAuth client ID, client secret, and refresh token.
-
-### Sync the Template Data Table
-
-Every Template owns its own data rows database. There is no generic data row table.
-
-| Step | Do This | Result |
-| --- | --- | --- |
-| 1 | Wait until Template status is `Ready`. | Tiller has accepted it. |
-| 2 | Set Template `Action` to `Sync Data Table`. | A Template-specific data table is created. |
-| 3 | Open `Data Rows Database URL`. | You see fields matching Tiller CSV columns. |
-
-### Build Campaign Rows
-
-| Field | What To Do |
+| Requirement | Why It Is Needed |
 | --- | --- |
-| `_Campaign` | Link the row to the Campaign you want to render. |
-| `_Include in Render` | Check this for every row that should be included. |
-| `_Row Status` | Worker marks rows valid or invalid. |
-| CSV fields | Fill exact values for the Template's CSV columns. |
+| Notion workspace with Workers enabled | Runs Worker tools and webhooks. |
+| One blank Notion setup page | Safe parent page where installer builds the portal. |
+| Notion internal integration token | Lets Worker create/read/update the portal databases. |
+| Tiller email/password | Lets Worker authenticate with Tiller. |
+| Node.js 22+ and npm | Runs the installer. |
+| Notion CLI | Deploys the Notion Worker. |
+| Optional Google Drive API key | Reads public Drive folders used for large asset sets. |
+| Optional Google Drive OAuth values | Reads private Drive folders or uploads outputs to Drive. |
 
-CSV field names must match the Template CSV Columns exactly.
+## Install Command
 
-### Create a Campaign
+Use this for a fresh setup:
 
-| Step | Do This | Result |
+```shell
+curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
+```
+
+If bootstrap pauses after Notion login, run:
+
+```shell
+ntn login poll
+```
+
+Then run manual install:
+
+```shell
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal install
+```
+
+## Credential Model
+
+Credentials are stored on the Notion Worker environment. They are not stored in Notion pages, Notion databases, or installer state.
+
+| Command | Use It For | Prints Secret Values? |
 | --- | --- | --- |
-| 1 | Open Campaigns. | Campaign workspace opens. |
-| 2 | Add a Campaign row. | New render job draft. |
-| 3 | Link the Template. | Worker knows which CSV schema to use. |
-| 4 | Add rows in that Template's data table and link `_Campaign`. | Campaign has render data. |
+| `credentials` | Update Notion token, Tiller email/password, Tiller API base, fallback CSV columns. | No. |
+| `google-drive` | Update Google Drive API key, OAuth values, max Drive download size. | No. |
+| `secrets` | See which Worker env values are set/missing and optionally delete old values. | No. |
+| `doctor` | Check local setup and Worker/Tiller health. | No. |
 
-## Render Options
-
-| Action | Use When | What Happens |
-| --- | --- | --- |
-| `Validate` | You want to check row/schema issues only. | Worker checks required fields and marks errors. |
-| `Build CSV` | You want to review CSV before rendering. | Worker writes `Generated CSV` and `CSV Row Count`. |
-| `Submit Render` | You are ready to render. | Worker validates, builds CSV, saves it, creates the Work Order, uploads parameters, and tracks outputs. |
-
-## Output Review
-
-Render Outputs are stored one file per row.
-
-| Field | Meaning |
-| --- | --- |
-| `Output File` | The Notion attachment for the finished render. |
-| `Campaign` | Campaign that produced the file. |
-| `Work Order` | Tiller Work Order that produced the file. |
-| `Template` | Template used for the render. |
-| `Status` | Output availability or failure state. |
-
-## Troubleshooting
-
-| Problem | What To Check |
-| --- | --- |
-| Template does not submit | Confirm `Cav File` is attached and `Action` is `Add to Tiller`. |
-| Template is pending assets | Add required assets, then use `Push Update`. |
-| Google Drive assets do not upload | Confirm folder link access and run the Google Drive command to add an API key or OAuth values. |
-| Campaign cannot build CSV | Confirm Template has a synced data table, rows are linked to `_Campaign`, and `_Include in Render` is checked. |
-| Render does not start | Check Campaign `Last Error`, `_Milestone`, and `_Progress Note`. |
-| Outputs do not show | Open Work Orders and use `Check Status` or `Download Results`. |
-| Tiller login fails | Run the credentials command in Terminal. |
-
-## Credential Command
-
-Use this if Tiller login changes:
+### Credential Commands
 
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials
 ```
 
-## Google Drive Command
-
-Use this if Google Drive public folder links, private folder links, or output uploads need setup:
-
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal google-drive
 ```
-
-## Secrets Command
-
-Use this to see which Worker secrets/config values are set or missing, and optionally delete old values. It does not print secret values.
 
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal secrets
 ```
 
-## Doctor Command
-
-Use this to check basic setup health:
-
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal doctor
 ```
 
-## Setup Checklist
+## Google Drive Setup
 
-| Done | Item |
-| --- | --- |
-|  | Install Notion CLI and log in. |
-|  | Create one blank Notion setup page. |
-|  | Create a Notion internal integration token. |
-|  | Share the setup page with the integration. |
-|  | Run the installer. |
-|  | Add database automations using the Settings webhook URLs. |
-|  | Add first Template. |
-|  | Sync first Template data table. |
-|  | Create first Campaign. |
-|  | Submit first render. |
+There is no built-in Google OAuth popup yet. Current setup is manual.
 
-## Automation Setup
+| Path | Best For | User Provides | Notion Field |
+| --- | --- | --- | --- |
+| Public Drive folder | Large folders that can be public by link. | Google Drive API key. | `Template Assets URL` |
+| Private Drive folder | Folders that should stay private. | Google client ID, client secret, refresh token. | `Template Assets URL` |
+| Notion uploads | Small asset sets and simple tests. | File attachments in Upload rows. | Uploads database rows |
 
-Create Notion database automations that watch each `Action` field.
+Public folder flow:
 
-| Database | Trigger | Webhook |
+1. Share the Drive folder as anyone with link can view.
+2. Run the `google-drive` command.
+3. Add `GOOGLE_DRIVE_API_KEY`.
+4. Paste the folder link into `Template Assets URL`.
+5. Set Template `Action` to `Push Update`.
+
+Private folder flow:
+
+1. Create Google OAuth credentials.
+2. Generate a refresh token for the Drive account.
+3. Run the `google-drive` command.
+4. Add client ID, client secret, and refresh token.
+5. Paste the folder link into `Template Assets URL`.
+6. Set Template `Action` to `Push Update`.
+
+Future ideal flow: `google-drive login` opens Google OAuth in the browser and stores the refresh token on the Worker. That is not implemented yet.
+
+## Notion Automations
+
+Create database automations that watch each `Action` field.
+
+| Database | Trigger Values | Webhook |
 | --- | --- | --- |
-| Templates | `Action` is `Add to Tiller`, `Push Update`, `Check Status`, or `Sync Data Table` | `templateAction` |
-| Campaigns | `Action` is `Validate`, `Build CSV`, or `Submit Render` | `campaignAction` |
-| Work Orders | `Action` is `Submit to Tiller`, `Check Status`, or `Download Results` | `workOrderAction` |
+| Templates | `Add to Tiller`, `Push Update`, `Check Status`, `Sync Data Table` | `templateAction` |
+| Campaigns | `Validate`, `Build CSV`, `Submit Render` | `campaignAction` |
+| Work Orders | `Submit to Tiller`, `Check Status`, `Download Results` | `workOrderAction` |
 
-For every Send webhook action:
+For every Notion `Send webhook` action:
 
 | Setting | Value |
 | --- | --- |
-| URL | Use the matching URL from Settings > Webhook URLs. |
+| URL | Matching URL from Settings > Webhook URLs. |
 | Custom headers | Leave empty. |
 | Content | Select all existing properties. |
 
-## First Render Path
+No custom JSON is needed. The Worker reads the page ID from Notion's webhook event and retrieves the full page from Notion.
+
+## Template Workflow
+
+| Step | Action | What Happens |
+| --- | --- | --- |
+| 1 | Add row in Templates. | Draft Template exists in Notion. |
+| 2 | Attach Cavalry file in `Cav File`. | Worker can upload the scene to Tiller. |
+| 3 | Set `Action` to `Add to Tiller`. | Worker submits Template to Tiller. |
+| 4 | Watch `_Milestone`, `_Progress`, `_Progress Note`, and `Tiller Response`. | User sees status or fix instructions. |
+| 5 | If pending assets, provide assets and set `Action` to `Push Update`. | Worker uploads matching missing assets. |
+| 6 | When Ready, set `Action` to `Sync Data Table`. | Worker creates Template-specific data rows database. |
+
+## Campaign Data Workflow
+
+Every Template gets its own data rows database because every Template can require different CSV columns.
+
+| Field Type | Naming Pattern | Meaning |
+| --- | --- | --- |
+| System fields | Start with `_` | Used by Notion/Worker, not exported as CSV data. |
+| CSV fields | Exact Tiller CSV names | Exported into the generated CSV. |
+| Relations | `_Campaign`, Template links | Connect campaign rows to render jobs. |
+
+Required row behavior:
+
+| Field | Required? | Notes |
+| --- | --- | --- |
+| `_Campaign` | Yes | Links row to the Campaign being rendered. |
+| `_Include in Render` | Yes | Only checked rows render. |
+| CSV columns | Depends on Template | Must match Template details from Tiller. |
+
+## Campaign Render Workflow
+
+| Campaign Action | Use When | Result |
+| --- | --- | --- |
+| `Validate` | Check data without creating a Work Order. | Errors are written to Campaign/rows. |
+| `Build CSV` | Review CSV before rendering. | `Generated CSV` and `CSV Row Count` are updated. |
+| `Submit Render` | Ready to render. | Worker validates, builds CSV, saves it, creates Work Order, uploads CSV, confirms inputs, and tracks outputs. |
+
+`Submit Render` automatically builds the CSV first. Users do not need to run `Build CSV` unless they want a preview.
+
+## Output Workflow
+
+Render Outputs are stored one file per row.
+
+| Field | Meaning |
+| --- | --- |
+| `Output File` | Finished render attached in Notion. |
+| `Campaign` | Campaign that produced the output. |
+| `Work Order` | Tiller Work Order that produced the output. |
+| `Template` | Template used for render. |
+| `Status` | Output availability or failure state. |
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Template does not submit | Confirm `Cav File` is attached and `Action` is `Add to Tiller`. |
+| Template pending assets | Add assets through Upload rows or `Template Assets URL`, then use `Push Update`. |
+| Google Drive assets fail | Run `google-drive`, confirm folder permissions, and confirm API key/OAuth values are set. |
+| Campaign cannot build CSV | Confirm Template has synced data table, rows link `_Campaign`, and `_Include in Render` is checked. |
+| Render does not start | Check Campaign `Last Error`, `_Milestone`, `_Progress Note`, then run `doctor`. |
+| Tiller auth fails | Run `credentials` and update Tiller email/password. |
+| Need to know what is configured | Run `secrets`; it shows set/missing only, not values. |
+| Outputs do not attach | Open Work Orders and use `Check Status` or `Download Results`. |
+
+## Safety Rules
+
+| Rule | Reason |
+| --- | --- |
+| Do not store passwords in Notion. | Credentials belong in Worker env only. |
+| Use public Drive folders only when sharing is acceptable. | Anyone with link can access them. |
+| Use OAuth for private Drive folders. | Keeps private assets behind account access. |
+| Keep one data table per Template. | CSV schemas vary by Template. |
+| Use `Build CSV` for first tests. | Easier to catch field mismatch before rendering. |
+| Use `Submit Render` for normal work. | It builds CSV automatically before submission. |
+
+## First Render Checklist
+
+| Done | Item |
+| --- | --- |
+|  | Installer completed. |
+|  | Webhook URLs saved in Settings. |
+|  | Notion automations created. |
+|  | `doctor` passes. |
+|  | Template added to Tiller. |
+|  | Template status is `Ready`. |
+|  | Template data table synced. |
+|  | Campaign created and linked to Template. |
+|  | Data rows linked to `_Campaign`. |
+|  | `_Include in Render` checked on rows. |
+|  | `Build CSV` reviewed or `Submit Render` run. |
+
+## First Render Sequence
 
 ```mermaid
 sequenceDiagram
@@ -206,22 +264,12 @@ sequenceDiagram
   participant Tiller
 
   User->>Notion: Set Campaign Action to Submit Render
-  Notion->>Worker: Send webhook
+  Notion->>Worker: Send campaignAction webhook
   Worker->>Notion: Read Campaign, Template, and data rows
-  Worker->>Notion: Save Generated CSV
+  Worker->>Notion: Save Generated CSV and progress
   Worker->>Tiller: Create Work Order
   Worker->>Tiller: Upload CSV parameters
   Worker->>Tiller: Confirm inputs
-  Tiller-->>Worker: Render status
-  Worker->>Notion: Attach outputs to Render Outputs
+  Tiller-->>Worker: Work Order status and outputs
+  Worker->>Notion: Create Render Outputs rows with attachments
 ```
-
-## Golden Rules
-
-| Rule | Reason |
-| --- | --- |
-| One Template, one data table. | Every Template has its own CSV schema. |
-| Use `Build CSV` when unsure. | It gives a safe preview. |
-| Use `Submit Render` when ready. | It builds CSV and sends the job in one action. |
-| Watch progress fields. | They tell you what the Worker is doing. |
-| Do not store passwords in Notion. | Credentials live on the Worker. |

@@ -83,6 +83,8 @@ Templates and Work Orders can use `Template Assets URL` as a Google Drive folder
 - Private folder links use Google Drive OAuth env values.
 - Notion file uploads still work for smaller asset sets.
 
+Google OAuth is manual today. The installer asks for client ID, client secret, and refresh token; it does not open a Google consent popup yet.
+
 Run `google-drive` to add or update these values.
 
 ## After Install
