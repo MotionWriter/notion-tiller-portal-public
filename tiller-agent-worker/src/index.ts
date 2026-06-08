@@ -2652,7 +2652,7 @@ async function finalizeWorkOrderInputs({
 			allowStatus: [409],
 		});
 	} else {
-		const created = await ensureMissingUploadRows({
+		await ensureMissingUploadRows({
 			notion,
 			parentPageId: pageId,
 			phase: "parameter",
@@ -2683,7 +2683,16 @@ async function finalizeWorkOrderInputs({
 		if (pendingParameters.length === 0) {
 			// Continue to dynamic assets.
 		} else {
-			await updateWorkOrderPending(notion, pageId, "Pending Parameters", pendingParameters);
+			const parameterRows = parameterUpload.missingRows.length > 0
+				? parameterUpload.missingRows
+				: await queryUploadRowsForParent({
+					notion,
+					parentKind: "work_order",
+					parentPageId: pageId,
+					phase: "parameter",
+					ready: false,
+				});
+			await updateWorkOrderPending(notion, pageId, "Pending Parameters", pendingParameters, parameterRows);
 			await setPageProgress(notion, pageId, 55, "Uploading Parameters", "Parameter files are still needed.");
 			return {
 				ok: true,
@@ -2693,7 +2702,7 @@ async function finalizeWorkOrderInputs({
 				notionStatus: "Pending Parameters",
 				uploadedParameters,
 				uploadedDynamicAssets: [],
-				createdUploadRows: created,
+				createdUploadRows: parameterRows.map(rowSummary),
 				outputRows: [],
 				results: [],
 				message: summary.templateAssetsUrl
@@ -2757,7 +2766,7 @@ async function finalizeWorkOrderInputs({
 					ready: false,
 				});
 				if (dynamicRows.some((row: UploadRow) => row.files.length === 0)) {
-					await updateWorkOrderPending(notion, pageId, "Pending Dynamic Assets", pendingDynamicAssets);
+					await updateWorkOrderPending(notion, pageId, "Pending Dynamic Assets", pendingDynamicAssets, dynamicRows);
 					await setPageProgress(notion, pageId, 85, "Waiting on Assets", "Dynamic assets are still needed.");
 					return {
 						ok: true,
@@ -2800,7 +2809,7 @@ async function finalizeWorkOrderInputs({
 			phase: "dynamic_asset",
 			ready: false,
 		});
-		await updateWorkOrderPending(notion, pageId, "Pending Dynamic Assets", pendingDynamicAssets);
+		await updateWorkOrderPending(notion, pageId, "Pending Dynamic Assets", pendingDynamicAssets, dynamicRows);
 		await setPageProgress(notion, pageId, 85, "Waiting on Assets", "Dynamic assets are still needed.");
 		return {
 			ok: true,
@@ -2856,6 +2865,7 @@ async function finalizeWorkOrderInputs({
 				: {}),
 		},
 	});
+	await clearCampaignMissingUploadsForWorkOrder(notion, pageId, notionStatus);
 	await setPageProgress(notion, pageId, statusResult.status === "Done" ? 100 : 80, statusResult.status === "Done" ? "Done" : "Waiting on Tiller", statusResult.status === "Done" ? "Render complete. Outputs are attached." : "Render submitted; still processing.");
 
 	return {
@@ -3464,6 +3474,7 @@ async function updateWorkOrderPending(
 	pageId: string,
 	status: string,
 	items: unknown[],
+	uploadRows: UploadRow[] = [],
 ) {
 	await notion.pages.update({
 		page_id: pageId,
@@ -3475,6 +3486,66 @@ async function updateWorkOrderPending(
 			"Last Synced At": { date: { start: new Date().toISOString() } },
 		},
 	});
+	await updateCampaignMissingUploadsForWorkOrder(notion, pageId, uploadRows, status);
+}
+
+async function updateCampaignMissingUploadsForWorkOrder(
+	notion: any,
+	workOrderPageId: string,
+	uploadRows: UploadRow[],
+	status: string,
+) {
+	const campaignPageId = await findCampaignPageIdForWorkOrder(notion, workOrderPageId);
+	if (!campaignPageId) return;
+	const uploadPageIds = uploadRows.map((row) => row.pageId).filter(Boolean);
+	const firstUploadUrl = uploadRows.find((row) => row.url)?.url ?? null;
+	try {
+		await notion.pages.update({
+			page_id: campaignPageId,
+			properties: {
+				"Campaign Status": { select: { name: "Needs Fix" } },
+				"Missing Uploads": relationValueMany(uploadPageIds),
+				"Missing Uploads URL": { url: firstUploadUrl },
+				"Last Error": richTextValue(`${status}: ${uploadRows.length} upload row(s) need files. Open Missing Uploads.`),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+	} catch {
+		await notion.pages.update({
+			page_id: campaignPageId,
+			properties: {
+				"Campaign Status": { select: { name: "Needs Fix" } },
+				"Last Error": richTextValue(`${status}: ${uploadRows.length} upload row(s) need files. Open the Uploads database > Needs Files.`),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+	}
+}
+
+async function clearCampaignMissingUploadsForWorkOrder(notion: any, workOrderPageId: string, notionStatus: string) {
+	const campaignPageId = await findCampaignPageIdForWorkOrder(notion, workOrderPageId);
+	if (!campaignPageId) return;
+	try {
+		await notion.pages.update({
+			page_id: campaignPageId,
+			properties: {
+				"Campaign Status": { select: { name: notionStatus === "Done" ? "Done" : "Rendering" } },
+				"Missing Uploads": relationValueMany([]),
+				"Missing Uploads URL": { url: null },
+				"Last Error": richTextValue(""),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+	} catch {
+		await notion.pages.update({
+			page_id: campaignPageId,
+			properties: {
+				"Campaign Status": { select: { name: notionStatus === "Done" ? "Done" : "Rendering" } },
+				"Last Error": richTextValue(""),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+	}
 }
 
 async function pollWorkOrderStatus(

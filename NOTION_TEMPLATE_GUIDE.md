@@ -136,6 +136,16 @@ If anything is missing or mismatched, no files are uploaded for that pass. The U
 | `Ready` | Checked after Worker uploads the row. |
 | `Last Error` | Missing file or filename mismatch instructions. |
 
+Campaign rows also show the punch list when a linked Work Order is blocked:
+
+| Campaign Field | What It Does |
+| --- | --- |
+| `Missing Uploads` | Relation to the exact Upload rows that need files. |
+| `Missing Uploads URL` | Link to the first missing Upload row for quick access. |
+| `Campaign Status` | Changes to `Needs Fix` while uploads are missing. |
+
+Use the Uploads database view `Needs Files` to see every unresolved upload across Templates and Work Orders.
+
 Public folder flow:
 
 1. Share the Drive folder as anyone with link can view.

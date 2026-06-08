@@ -142,6 +142,8 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 			{ name: "Generated CSV", type: "rich_text" },
 			{ name: "Action", type: "select", options: ["None", "Validate", "Build CSV", "Submit Render"] },
 			{ name: "Work Order", type: "relation", relationTo: "workOrders" },
+			{ name: "Missing Uploads", type: "relation", relationTo: "uploads" },
+			{ name: "Missing Uploads URL", type: "url" },
 			{ name: "Render Outputs", type: "relation", relationTo: "renderOutputs" },
 			{ name: "_Milestone", type: "select", options: PROGRESS_MILESTONES },
 			{ name: "_Progress Note", type: "rich_text" },

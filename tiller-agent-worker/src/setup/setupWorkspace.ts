@@ -60,7 +60,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Campaign Status", select: { does_not_equal: "Done" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Generated CSV", "Action", "Work Order", "Render Outputs", "_Milestone", "_Progress Note", "Last Error"],
+		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Generated CSV", "Action", "Work Order", "Missing Uploads", "Missing Uploads URL", "Render Outputs", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "campaigns",
@@ -68,7 +68,7 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		type: "table",
 		filter: { property: "Campaign Status", select: { equals: "Needs Fix" } },
 		sorts: [{ property: "Last Synced At", direction: "descending" }],
-		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Action", "_Milestone", "_Progress Note", "Last Error"],
+		visibleProperties: ["Name", "Template", "Campaign Status", "CSV Row Count", "Action", "Missing Uploads", "Missing Uploads URL", "_Milestone", "_Progress Note", "Last Error"],
 	},
 	{
 		key: "campaigns",

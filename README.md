@@ -84,6 +84,7 @@ Templates and Work Orders can use `Template Assets URL` as a Google Drive folder
 - Notion file uploads still work for smaller asset sets.
 - Mixed Notion uploads plus Google Drive folders are supported; Notion attachments win per Upload row, Drive fills rows without attachments.
 - The Worker validates all pending Upload rows before uploading. Missing or mismatched files are shown in the Uploads database `Last Error` field.
+- Blocked Campaign rows get `Missing Uploads` and `Missing Uploads URL` filled so users can jump straight to files that need attention.
 
 Google OAuth is manual today. The installer asks for client ID, client secret, and refresh token; it does not open a Google consent popup yet.
 
