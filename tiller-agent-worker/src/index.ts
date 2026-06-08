@@ -4050,32 +4050,32 @@ function sleep(ms: number) {
 }
 
 async function listPublicDriveFolderFiles(folderUrl: string) {
-	const apiKey = getRequiredEnv("GOOGLE_DRIVE_API_KEY");
+	const auth = await getGoogleDriveReadAuth();
 	const folderId = extractGoogleDriveFolderId(folderUrl);
 	if (!folderId) {
 		throw new Error("Template Assets URL is not a recognized Google Drive folder link.");
 	}
-	return listPublicDriveFolderFilesById(folderId, apiKey);
+	return listPublicDriveFolderFilesById(folderId, auth);
 }
 
-async function listPublicDriveFolderFilesById(folderId: string, apiKey: string, prefix = "") {
+async function listPublicDriveFolderFilesById(folderId: string, auth: GoogleDriveReadAuth, prefix = "") {
 	const files: DriveFile[] = [];
 	let pageToken = "";
 	do {
 		const url = new URL("https://www.googleapis.com/drive/v3/files");
-		url.searchParams.set("key", apiKey);
+		applyGoogleDriveAuth(url, auth);
 		url.searchParams.set("q", `'${folderId}' in parents and trashed=false`);
 		url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,size)");
 		url.searchParams.set("pageSize", "1000");
 		url.searchParams.set("supportsAllDrives", "true");
 		url.searchParams.set("includeItemsFromAllDrives", "true");
 		if (pageToken) url.searchParams.set("pageToken", pageToken);
-		const response = await fetch(url);
+		const response = await fetch(url, { headers: googleDriveAuthHeaders(auth) });
 		const data = await parseDriveJsonResponse(response, "list Google Drive folder files");
 		for (const file of (data as { files?: DriveFile[] }).files ?? []) {
 			const relativePath = prefix ? `${prefix}/${file.name}` : file.name;
 			if (file.mimeType === "application/vnd.google-apps.folder") {
-				files.push(...await listPublicDriveFolderFilesById(file.id, apiKey, relativePath));
+				files.push(...await listPublicDriveFolderFilesById(file.id, auth, relativePath));
 			} else {
 				files.push({ ...file, relativePath });
 			}
@@ -4113,7 +4113,7 @@ function matchDriveFilesToUploadRows(files: DriveFile[], rows: UploadRow[]) {
 }
 
 async function fetchDriveBinaryFile(file: DriveFile) {
-	const apiKey = getRequiredEnv("GOOGLE_DRIVE_API_KEY");
+	const auth = await getGoogleDriveReadAuth();
 	const size = Number(file.size ?? 0);
 	const maxBytes = getMaxDriveDownloadBytes();
 	if (Number.isFinite(size) && size > maxBytes) {
@@ -4123,9 +4123,9 @@ async function fetchDriveBinaryFile(file: DriveFile) {
 		throw new Error(`Google Drive file ${file.name} is a Google-native file and cannot be uploaded as binary.`);
 	}
 	const url = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
-	url.searchParams.set("key", apiKey);
+	applyGoogleDriveAuth(url, auth);
 	url.searchParams.set("alt", "media");
-	const response = await fetch(url);
+	const response = await fetch(url, { headers: googleDriveAuthHeaders(auth) });
 	if (!response.ok) {
 		await parseDriveJsonResponse(response, `download Google Drive file ${file.name}`);
 	}
@@ -4142,6 +4142,34 @@ async function fetchDriveBinaryFile(file: DriveFile) {
 		bytes,
 		contentType: response.headers.get("content-type") ?? file.mimeType ?? "application/octet-stream",
 	};
+}
+
+type GoogleDriveReadAuth = {
+	apiKey?: string;
+	accessToken?: string;
+};
+
+async function getGoogleDriveReadAuth(): Promise<GoogleDriveReadAuth> {
+	const apiKey = process.env.GOOGLE_DRIVE_API_KEY?.trim();
+	if (apiKey) return { apiKey };
+
+	const hasOAuth =
+		process.env.GOOGLE_DRIVE_CLIENT_ID?.trim() &&
+		process.env.GOOGLE_DRIVE_CLIENT_SECRET?.trim() &&
+		process.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim();
+	if (hasOAuth) return { accessToken: await getGoogleDriveAccessToken() };
+
+	throw new Error(
+		`Google Drive access is not configured. For public folder links, add a Google Drive API key. For private folders, add Google Drive OAuth credentials. Run: ${CLI_CREDENTIALS_COMMAND}`,
+	);
+}
+
+function applyGoogleDriveAuth(url: URL, auth: GoogleDriveReadAuth) {
+	if (auth.apiKey) url.searchParams.set("key", auth.apiKey);
+}
+
+function googleDriveAuthHeaders(auth: GoogleDriveReadAuth) {
+	return auth.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : undefined;
 }
 
 async function parseDriveJsonResponse(response: Response, action: string) {

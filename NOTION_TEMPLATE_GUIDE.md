@@ -57,6 +57,18 @@ flowchart TD
 
 If Tiller reports missing assets, add the assets, then set `Action` to `Push Update`.
 
+### Add Template Assets
+
+Use one of these paths:
+
+| Path | Best For | What To Fill |
+| --- | --- | --- |
+| Notion upload rows | Small asset sets. | Attach files in Uploads rows, then use `Push Update`. |
+| Public Google Drive folder | Large shared asset folders. | Put an anyone-with-link folder URL in `Template Assets URL`. |
+| Google Drive OAuth | Private Drive folders or output uploads. | Run the credentials command and add Google Drive OAuth values. |
+
+For public Google Drive folders, the Worker needs a Google Drive API key saved through the credentials command. For private folders, save Google Drive OAuth client ID, client secret, and refresh token.
+
 ### Sync the Template Data Table
 
 Every Template owns its own data rows database. There is no generic data row table.
@@ -113,6 +125,7 @@ Render Outputs are stored one file per row.
 | --- | --- |
 | Template does not submit | Confirm `Cav File` is attached and `Action` is `Add to Tiller`. |
 | Template is pending assets | Add required assets, then use `Push Update`. |
+| Google Drive assets do not upload | Confirm folder link access and run the credentials command to add a Google Drive API key or OAuth values. |
 | Campaign cannot build CSV | Confirm Template has a synced data table, rows are linked to `_Campaign`, and `_Include in Render` is checked. |
 | Render does not start | Check Campaign `Last Error`, `_Milestone`, and `_Progress Note`. |
 | Outputs do not show | Open Work Orders and use `Check Status` or `Download Results`. |
@@ -120,7 +133,7 @@ Render Outputs are stored one file per row.
 
 ## Credential Command
 
-Use this if the Tiller email/password changes:
+Use this if Tiller login or Google Drive credentials change:
 
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials
@@ -196,4 +209,3 @@ sequenceDiagram
 | Use `Submit Render` when ready. | It builds CSV and sends the job in one action. |
 | Watch progress fields. | They tell you what the Worker is doing. |
 | Do not store passwords in Notion. | Credentials live on the Worker. |
-

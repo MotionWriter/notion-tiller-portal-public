@@ -19,6 +19,8 @@ The bootstrap checks Node/npm, installs the Notion CLI if needed, logs into Noti
 - A Notion internal integration token
 - Tiller email/password
 - Node.js 22+ installed locally
+- Optional Google Drive API key for public asset folder links
+- Optional Google Drive OAuth credentials for private folders or Drive output uploads
 
 Create the Notion token at [Notion internal integrations](https://www.notion.so/profile/integrations/internal), then share the setup page with that integration.
 
@@ -60,6 +62,16 @@ Change credentials:
 ```sh
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials
 ```
+
+## Google Drive Assets
+
+Templates and Work Orders can use `Template Assets URL` as a Google Drive folder link.
+
+- Public folder links use `GOOGLE_DRIVE_API_KEY`.
+- Private folder links use Google Drive OAuth env values.
+- Notion file uploads still work for smaller asset sets.
+
+Run `credentials` to add or update these values.
 
 ## After Install
 

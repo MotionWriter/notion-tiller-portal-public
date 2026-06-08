@@ -275,11 +275,11 @@ async function updateCredentials() {
 		updates.push(["TILLER_API_BASE", await ask(rl, "Tiller API base URL: ")]);
 	}
 
-	if (await askYesNo(rl, "Update Google Drive API key? [y/N] ")) {
+	if (await askYesNo(rl, "Update Google Drive API key for public folder links? [y/N] ")) {
 		updates.push(["GOOGLE_DRIVE_API_KEY", await askHidden(rl, "Google Drive API key: ")]);
 	}
 
-	if (await askYesNo(rl, "Update Google Drive OAuth client/refresh token? [y/N] ")) {
+	if (await askYesNo(rl, "Update Google Drive OAuth for private folders/output uploads? [y/N] ")) {
 		updates.push(["GOOGLE_DRIVE_CLIENT_ID", await ask(rl, "Google Drive client ID: ")]);
 		updates.push(["GOOGLE_DRIVE_CLIENT_SECRET", await askHidden(rl, "Google Drive client secret: ")]);
 		updates.push(["GOOGLE_DRIVE_REFRESH_TOKEN", await askHidden(rl, "Google Drive refresh token: ")]);
