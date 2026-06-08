@@ -11,6 +11,7 @@ const DEFAULT_TILLER_API_BASE = "https://tiller.work/api/wo";
 const DEFAULT_MAX_DRIVE_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const WORK_ORDER_STATUS_PROPERTY = "Render Status";
 const CLI_CREDENTIALS_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials";
+const CLI_GOOGLE_DRIVE_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal google-drive";
 const insecureTillerAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 type PortalDataSourceKey = Exclude<DatabaseKey, "config">;
@@ -4160,7 +4161,7 @@ async function getGoogleDriveReadAuth(): Promise<GoogleDriveReadAuth> {
 	if (hasOAuth) return { accessToken: await getGoogleDriveAccessToken() };
 
 	throw new Error(
-		`Google Drive access is not configured. For public folder links, add a Google Drive API key. For private folders, add Google Drive OAuth credentials. Run: ${CLI_CREDENTIALS_COMMAND}`,
+		`Google Drive access is not configured. For public folder links, add a Google Drive API key. For private folders, add Google Drive OAuth credentials. Run: ${CLI_GOOGLE_DRIVE_COMMAND}`,
 	);
 }
 

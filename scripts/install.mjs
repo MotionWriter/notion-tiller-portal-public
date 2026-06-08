@@ -415,6 +415,7 @@ const DELETE_SECRET_SETS = [
 		label: "Tiller login",
 		names: ["TILLER_EMAIL", "TILLER_PASSWORD"],
 		command: `${cliCommand} credentials`,
+		warning: "Deleting this stops Tiller renders until a new email/password is set.",
 	},
 	{
 		key: "2",
@@ -509,6 +510,7 @@ async function manageSecrets() {
 
 	for (const option of selectedOptions) {
 		for (const name of option.names) {
+			if (!envNames.has(name)) continue;
 			unsetWorkerEnv(workersConfig, name);
 		}
 	}

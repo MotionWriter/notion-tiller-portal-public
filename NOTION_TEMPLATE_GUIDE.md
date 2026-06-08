@@ -149,7 +149,7 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 
 ## Secrets Command
 
-Use this to see which Worker secrets/config values are set, missing, or safe to delete. It does not print secret values.
+Use this to see which Worker secrets/config values are set or missing, and optionally delete old values. It does not print secret values.
 
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal secrets
