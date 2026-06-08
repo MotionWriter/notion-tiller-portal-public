@@ -118,6 +118,8 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 
 There is no built-in Google OAuth popup yet. Current setup is manual.
 
+Shareable credential guide: [Google Drive API Setup for Tiller Portal](https://app.notion.com/p/379159ce78f8816a89deeacfa674be64)
+
 | Path | Best For | User Provides | Notion Field |
 | --- | --- | --- | --- |
 | Public Drive folder | Large folders that can be public by link. | Google Drive API key. | `Template Assets URL` |
