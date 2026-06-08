@@ -124,7 +124,17 @@ There is no built-in Google OAuth popup yet. Current setup is manual.
 | Private Drive folder | Folders that should stay private. | Google client ID, client secret, refresh token. | `Template Assets URL` |
 | Notion uploads | Small asset sets and simple tests. | File attachments in Upload rows. | Uploads database rows |
 
-Mixed sources are supported. If an Upload row has a Notion attachment, the Worker uploads that attachment first. If an Upload row has no attachment, the Worker tries to match a file from `Template Assets URL`. It only confirms the Tiller upload phase after every required row is ready.
+Mixed sources are supported. The Worker checks every pending Upload row before uploading anything. If an Upload row has a Notion attachment, the attached filename must match the expected Tiller filename for exact file paths. If an Upload row has no attachment, the Worker tries to match a file from `Template Assets URL`. It only starts uploading after every required row has a valid Notion attachment or Google Drive match.
+
+If anything is missing or mismatched, no files are uploaded for that pass. The Uploads database becomes the punch list:
+
+| Upload Field | What To Look For |
+| --- | --- |
+| `Phase` | `template_asset`, `parameter`, or `dynamic_asset`. |
+| `Tiller Path` | Exact path Tiller expects. |
+| `File` | Attach the matching Notion file here when not using Drive. |
+| `Ready` | Checked after Worker uploads the row. |
+| `Last Error` | Missing file or filename mismatch instructions. |
 
 Public folder flow:
 
@@ -223,6 +233,7 @@ Render Outputs are stored one file per row.
 | Template does not submit | Confirm `Cav File` is attached and `Action` is `Add to Tiller`. |
 | Template pending assets | Add assets through Upload rows or `Template Assets URL`, then use `Push Update`. |
 | Google Drive assets fail | Run `google-drive`, confirm folder permissions, and confirm API key/OAuth values are set. |
+| Upload rows show filename mismatch | Attach a file whose filename matches the expected `Tiller Path` basename, or fix the Drive folder file name. |
 | Campaign cannot build CSV | Confirm Template has synced data table, rows link `_Campaign`, and `_Include in Render` is checked. |
 | Render does not start | Check Campaign `Last Error`, `_Milestone`, `_Progress Note`, then run `doctor`. |
 | Tiller auth fails | Run `credentials` and update Tiller email/password. |

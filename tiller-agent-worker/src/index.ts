@@ -3318,11 +3318,45 @@ async function uploadRowsToTiller({
 		: new Map<string, DriveFile>();
 	const uploaded: UploadedFileSummary[] = [];
 	const missingRows: UploadRow[] = [];
+	const plannedUploads: Array<
+		| { row: UploadRow; source: "notion"; parts: Array<{ uploadPath: string; file: { name: string; url: string } }> }
+		| { row: UploadRow; source: "google_drive"; driveFile: DriveFile }
+	> = [];
 
 	for (const row of rows) {
+		if (row.files.length > 0) {
+			const validation = validateNotionUploadRow(row);
+			if (!validation.ok) {
+				await markUploadRowError(notion, row.pageId, validation.message);
+				missingRows.push(row);
+				continue;
+			}
+			plannedUploads.push({ row, source: "notion", parts: validation.parts });
+			continue;
+		}
+
+		const driveMatch = driveMatches.get(row.pageId);
+		if (driveMatch) {
+			plannedUploads.push({ row, source: "google_drive", driveFile: driveMatch });
+			continue;
+		}
+
+		const message = folderUrl
+			? `No Notion attachment and no matching Google Drive file found for ${row.tillerPath}.`
+			: `Attach a file for ${row.tillerPath}.`;
+		await markUploadRowError(notion, row.pageId, message);
+		missingRows.push(row);
+	}
+
+	if (missingRows.length > 0) {
+		return { uploaded, missingRows };
+	}
+
+	for (const planned of plannedUploads) {
+		const row = planned.row;
 		try {
-			if (row.files.length > 0) {
-				for (const part of buildUploadParts(row.tillerPath, row.files)) {
+			if (planned.source === "notion") {
+				for (const part of planned.parts) {
 					const file = await fetchNotionBinaryFile(part.file);
 					await client.uploadMultipart(uploadPath, part.uploadPath, file);
 				}
@@ -3337,9 +3371,8 @@ async function uploadRowsToTiller({
 				continue;
 			}
 
-			const driveMatch = driveMatches.get(row.pageId);
-			if (driveMatch) {
-				const file = await fetchDriveBinaryFile(driveMatch);
+			if (planned.source === "google_drive") {
+				const file = await fetchDriveBinaryFile(planned.driveFile);
 				await client.uploadMultipart(uploadPath, row.tillerPath, file);
 				await markUploadRowReady(notion, row.pageId);
 				uploaded.push({
@@ -3347,24 +3380,40 @@ async function uploadRowsToTiller({
 					tillerPath: row.tillerPath,
 					source: "google_drive",
 					fileCount: null,
-					driveFile: driveMatch.name,
+					driveFile: planned.driveFile.name,
 				});
 				continue;
 			}
-
-			missingRows.push(row);
 		} catch (error) {
-			await notion.pages.update({
-				page_id: row.pageId,
-				properties: {
-					"Last Error": richTextValue((error as Error)?.message ?? String(error)),
-				},
-			});
+			await markUploadRowError(notion, row.pageId, (error as Error)?.message ?? String(error));
 			throw error;
 		}
 	}
 
 	return { uploaded, missingRows };
+}
+
+function validateNotionUploadRow(row: UploadRow) {
+	const parts = buildUploadParts(row.tillerPath, row.files);
+	if (!isExactFilePath(row.tillerPath)) return { ok: true as const, parts };
+
+	const expectedName = basename(row.tillerPath);
+	const attachedNames = row.files.map((file) => file.name).filter(Boolean);
+	if (parts.length !== 1 || attachedNames.length !== 1) {
+		return {
+			ok: false as const,
+			parts: [],
+			message: `Expected one file named ${expectedName} for ${row.tillerPath}, but found ${attachedNames.length || 0} attachment(s).`,
+		};
+	}
+	if (normalizeFilename(attachedNames[0]) !== normalizeFilename(expectedName)) {
+		return {
+			ok: false as const,
+			parts: [],
+			message: `Attached file ${attachedNames[0]} does not match expected file ${expectedName} for ${row.tillerPath}.`,
+		};
+	}
+	return { ok: true as const, parts };
 }
 
 async function markUploadRowReady(notion: any, pageId: string) {
@@ -3374,6 +3423,16 @@ async function markUploadRowReady(notion: any, pageId: string) {
 			Ready: { checkbox: true },
 			"Uploaded At": { date: { start: new Date().toISOString() } },
 			"Last Error": richTextValue(""),
+		},
+	});
+}
+
+async function markUploadRowError(notion: any, pageId: string, message: string) {
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Ready: { checkbox: false },
+			"Last Error": richTextValue(message),
 		},
 	});
 }
@@ -4204,6 +4263,19 @@ function normalizeUploadPath(value: string) {
 		.replace(/^assets\//i, "")
 		.replace(/\\/g, "/")
 		.replace(/^\/+/, "");
+}
+
+function basename(value: string) {
+	return normalizeUploadPath(value).split("/").filter(Boolean).at(-1) ?? "";
+}
+
+function normalizeFilename(value: string) {
+	return basename(value).trim().toLowerCase();
+}
+
+function isExactFilePath(value: string) {
+	const name = basename(value);
+	return /\.[a-z0-9]{1,12}$/i.test(name);
 }
 
 function escapeMultipartValue(value: string) {

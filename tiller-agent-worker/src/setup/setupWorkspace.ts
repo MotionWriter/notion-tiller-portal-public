@@ -143,6 +143,22 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		visibleProperties: ["Name", "Render Outputs", "Completed Renders", "Completed At", "Template", "Campaign", "Render Status", "Tiller Work Order ID"],
 	},
 	{
+		key: "uploads",
+		name: "Needs Files",
+		type: "table",
+		filter: { property: "Ready", checkbox: { equals: false } },
+		sorts: [{ property: "Phase", direction: "ascending" }],
+		visibleProperties: ["Name", "Phase", "File", "Tiller Path", "Ready", "Parent Template", "Parent Work Order", "Last Error"],
+	},
+	{
+		key: "uploads",
+		name: "Ready Uploads",
+		type: "table",
+		filter: { property: "Ready", checkbox: { equals: true } },
+		sorts: [{ property: "Uploaded At", direction: "descending" }],
+		visibleProperties: ["Name", "Phase", "Tiller Path", "Ready", "Uploaded At", "Parent Template", "Parent Work Order", "Last Error"],
+	},
+	{
 		key: "templateDataTableIndex",
 		name: "All Template Data Tables",
 		type: "table",
@@ -775,6 +791,7 @@ async function appendPortalNavigation(
 			calloutBlock("Build assets", "blue_background", [
 				linkedParagraphBlock("Templates", refs.templates?.url),
 				linkedParagraphBlock("Work Orders", refs.workOrders?.url),
+				linkedParagraphBlock("Uploads", refs.uploads?.url),
 				linkedParagraphBlock("Template Data Tables", notionPageUrl(templateDataTablesPageId)),
 			]),
 			calloutBlock("Campaign outputs", "gray_background", [
