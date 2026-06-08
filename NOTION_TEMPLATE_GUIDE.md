@@ -147,6 +147,14 @@ Use this if Google Drive public folder links, private folder links, or output up
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal google-drive
 ```
 
+## Secrets Command
+
+Use this to see which Worker secrets/config values are set, missing, or safe to delete. It does not print secret values.
+
+```shell
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal secrets
+```
+
 ## Doctor Command
 
 Use this to check basic setup health:

@@ -745,6 +745,8 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			codeBlock(`${CLI_COMMAND} credentials`),
 			paragraphBlock("If Google Drive asset links or output uploads fail, run this in Terminal:"),
 			codeBlock(`${CLI_COMMAND} google-drive`),
+			paragraphBlock("To review set/missing Worker secrets or delete old values, run this in Terminal:"),
+			codeBlock(`${CLI_COMMAND} secrets`),
 		],
 	});
 }
@@ -801,6 +803,8 @@ async function appendSetupInstructions(
 				codeBlock(`${CLI_COMMAND} credentials`),
 				paragraphBlock("To update Google Drive public folder links, private folders, or output uploads, run this in Terminal:"),
 				codeBlock(`${CLI_COMMAND} google-drive`),
+				paragraphBlock("To see which Worker secrets are set or delete old values, run this in Terminal:"),
+				codeBlock(`${CLI_COMMAND} secrets`),
 				paragraphBlock("To check the install, run this in Terminal:"),
 				codeBlock(`${CLI_COMMAND} doctor`),
 			],

@@ -50,6 +50,10 @@ async function main() {
 		await updateCredentials();
 		return;
 	}
+	if (command === "secrets") {
+		await manageSecrets();
+		return;
+	}
 	if (command === "google-drive") {
 		await updateGoogleDriveCredentials();
 		return;
@@ -59,7 +63,7 @@ async function main() {
 		return;
 	}
 	if (command !== "install") {
-		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", "google-drive", or "onboarding".`);
+		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", "google-drive", "secrets", or "onboarding".`);
 	}
 
 	console.log(color.bold("Notion Tiller Portal installer"));
@@ -373,6 +377,203 @@ async function updateGoogleDriveCredentials() {
 	console.log(`${cliCommand} doctor`);
 }
 
+const SECRET_GROUPS = [
+	{
+		title: "Notion",
+		items: [
+			["NOTION_API_TOKEN", "Internal integration token", "required"],
+			["TILLER_PORTAL_CONFIG_DATA_SOURCE_ID", "Portal config data source", "required"],
+		],
+	},
+	{
+		title: "Tiller",
+		items: [
+			["TILLER_EMAIL", "Tiller email", "required"],
+			["TILLER_PASSWORD", "Tiller password", "required"],
+			["TILLER_API_BASE", "Custom API base", "optional"],
+		],
+	},
+	{
+		title: "Google Drive",
+		items: [
+			["GOOGLE_DRIVE_API_KEY", "Public folder API key", "optional"],
+			["GOOGLE_DRIVE_CLIENT_ID", "OAuth client ID", "optional"],
+			["GOOGLE_DRIVE_CLIENT_SECRET", "OAuth client secret", "optional"],
+			["GOOGLE_DRIVE_REFRESH_TOKEN", "OAuth refresh token", "optional"],
+			["MAX_DRIVE_DOWNLOAD_BYTES", "Max download bytes", "optional"],
+		],
+	},
+	{
+		title: "Advanced",
+		items: [["CAMPAIGN_CSV_COLUMNS", "Fallback CSV columns", "optional"]],
+	},
+];
+
+const DELETE_SECRET_SETS = [
+	{
+		key: "1",
+		label: "Tiller login",
+		names: ["TILLER_EMAIL", "TILLER_PASSWORD"],
+		command: `${cliCommand} credentials`,
+	},
+	{
+		key: "2",
+		label: "Tiller custom API base",
+		names: ["TILLER_API_BASE"],
+		command: `${cliCommand} credentials`,
+	},
+	{
+		key: "3",
+		label: "Google Drive public-folder API key",
+		names: ["GOOGLE_DRIVE_API_KEY"],
+		command: `${cliCommand} google-drive`,
+	},
+	{
+		key: "4",
+		label: "Google Drive OAuth",
+		names: ["GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"],
+		command: `${cliCommand} google-drive`,
+	},
+	{
+		key: "5",
+		label: "Google Drive max download bytes",
+		names: ["MAX_DRIVE_DOWNLOAD_BYTES"],
+		command: `${cliCommand} google-drive`,
+	},
+	{
+		key: "6",
+		label: "Fallback CSV columns",
+		names: ["CAMPAIGN_CSV_COLUMNS"],
+		command: `${cliCommand} credentials`,
+	},
+	{
+		key: "7",
+		label: "Notion internal integration token",
+		names: ["NOTION_API_TOKEN"],
+		command: `${cliCommand} credentials`,
+		warning: "Deleting this stops Worker access to Notion until a new token is set.",
+	},
+];
+
+async function manageSecrets() {
+	console.log("Notion Tiller Portal secrets\n");
+	console.log("This shows which Worker secrets/config values are set. It never prints secret values.\n");
+	checkCommand("ntn", ["--version"], "Notion CLI missing.");
+	ensureNotionLogin();
+
+	const workersConfig = path.join(workerDir, "workers.json");
+	if (!existsSync(workersConfig)) {
+		throw new Error("No deployed Worker found. Run install first.");
+	}
+	const workerId = readWorkerId(workersConfig);
+	console.log(`Worker ${workerId}.\n`);
+
+	const envNames = listWorkerEnvNames(workersConfig);
+	printSecretStatus(envNames);
+
+	const rl = createPrompt();
+	const shouldDelete = await askActionYesNoDefault(rl, "Delete any stored Worker secrets/config values? [y/N] ", false);
+	if (!shouldDelete) {
+		rl.close();
+		printSecretUpdateHints();
+		return;
+	}
+
+	console.log("");
+	for (const option of DELETE_SECRET_SETS) {
+		const names = option.names.filter((name) => envNames.has(name));
+		const status = names.length > 0 ? "set" : "not set";
+		console.log(`${option.key}. ${option.label} (${status})`);
+	}
+	printActionNeeded();
+	const selected = await question(rl, "Type numbers to delete, comma-separated. Example: 3,4. Or press Enter to cancel: ");
+	const keys = selected.split(",").map((value) => value.trim()).filter(Boolean);
+	if (keys.length === 0) {
+		rl.close();
+		console.log("No secrets deleted.");
+		return;
+	}
+
+	const selectedOptions = keys.map((key) => DELETE_SECRET_SETS.find((option) => option.key === key));
+	if (selectedOptions.some((option) => !option)) {
+		rl.close();
+		throw new Error("Unknown selection.");
+	}
+
+	for (const option of selectedOptions) {
+		if (option.warning) console.log(color.yellow(option.warning));
+	}
+	const confirm = await askActionYesNoDefault(rl, "Delete selected values from Worker env? [y/N] ", false);
+	rl.close();
+	if (!confirm) throw new Error("Stopped before deleting secrets.");
+
+	for (const option of selectedOptions) {
+		for (const name of option.names) {
+			unsetWorkerEnv(workersConfig, name);
+		}
+	}
+
+	console.log("\nDeleted selected values.");
+	printSecretUpdateHints();
+}
+
+function listWorkerEnvNames(workersConfig) {
+	const result = run("ntn", ["workers", "env", "list", "--json", "--workers-config-file", workersConfig], {
+		cwd: workerDir,
+		capture: true,
+		quiet: true,
+	});
+	return parseEnvListNames(result.stdout);
+}
+
+function parseEnvListNames(value) {
+	try {
+		const parsed = JSON.parse(value);
+		if (Array.isArray(parsed)) {
+			return new Set(parsed.map((item) => {
+				if (typeof item === "string") return item;
+				return item?.name ?? item?.key ?? item?.variable ?? "";
+			}).filter(Boolean));
+		}
+		if (parsed && typeof parsed === "object") {
+			if (Array.isArray(parsed.env)) return parseEnvListNames(JSON.stringify(parsed.env));
+			if (Array.isArray(parsed.variables)) return parseEnvListNames(JSON.stringify(parsed.variables));
+			return new Set(Object.keys(parsed));
+		}
+	} catch {
+		// Fall back to text parsing below.
+	}
+
+	const known = new Set(SECRET_GROUPS.flatMap((group) => group.items.map(([name]) => name)));
+	return new Set(String(value ?? "")
+		.split(/\r?\n/)
+		.map((line) => line.trim().split(/\s+/)[0])
+		.filter((name) => known.has(name)));
+}
+
+function printSecretStatus(envNames) {
+	for (const group of SECRET_GROUPS) {
+		printSection("Status", group.title);
+		for (const [name, label, importance] of group.items) {
+			const set = envNames.has(name);
+			const marker = set ? "set" : importance === "required" ? "missing" : "not set";
+			const text = `${label}: ${marker}`;
+			if (!set && importance === "required") {
+				console.log(color.yellow(`- ${text}`));
+			} else {
+				console.log(`- ${text}`);
+			}
+		}
+	}
+}
+
+function printSecretUpdateHints() {
+	console.log("\nUpdate commands:");
+	console.log(`- Tiller/Notion: ${cliCommand} credentials`);
+	console.log(`- Google Drive: ${cliCommand} google-drive`);
+	console.log(`- Health check: ${cliCommand} doctor`);
+}
+
 async function ensureTillerAuth(workersConfig) {
 	for (;;) {
 		const result = await runWithSpinner("ntn", [
@@ -553,6 +754,13 @@ function setWorkerEnv(workersConfig, name, value) {
 	run("ntn", ["workers", "env", "set", `${name}=${value}`, "--workers-config-file", workersConfig], {
 		cwd: workerDir,
 		label: `ntn workers env set ${name}=<redacted> --workers-config-file ${workersConfig}`,
+	});
+}
+
+function unsetWorkerEnv(workersConfig, name) {
+	run("ntn", ["workers", "env", "unset", name, "--workers-config-file", workersConfig], {
+		cwd: workerDir,
+		label: `ntn workers env unset ${name} --workers-config-file ${workersConfig}`,
 	});
 }
 

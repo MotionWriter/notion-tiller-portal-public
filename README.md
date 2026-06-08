@@ -69,6 +69,12 @@ Set up Google Drive:
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal google-drive
 ```
 
+Review or delete stored Worker secrets:
+
+```sh
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal secrets
+```
+
 ## Google Drive Assets
 
 Templates and Work Orders can use `Template Assets URL` as a Google Drive folder link.
