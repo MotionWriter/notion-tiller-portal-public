@@ -39,4 +39,4 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 
 Use the separate Google Drive setup page for API links, scopes, and AI helper prompt:
 
-[Google Drive API Setup for Tiller Portal](https://app.notion.com/p/379159ce78f8816a89deeacfa674be64)
+[Google Drive API Setup for Tiller Portal](https://app.notion.com/p/379159ce78f881609406cd89425a84ce)

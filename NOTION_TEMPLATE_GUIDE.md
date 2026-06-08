@@ -28,7 +28,7 @@ Start with Quick Start, then jump into the specific page you need.
 ## Shareable Notion Pages
 
 - [Tiller Portal Template Guide](https://app.notion.com/p/379159ce78f881559769c793f1c0a75f)
-- [Google Drive API Setup for Tiller Portal](https://app.notion.com/p/379159ce78f8816a89deeacfa674be64)
+- [Google Drive API Setup for Tiller Portal](https://app.notion.com/p/379159ce78f881609406cd89425a84ce)
 
 ## Support Commands
 
