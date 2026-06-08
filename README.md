@@ -90,6 +90,35 @@ Google OAuth is manual today. The installer asks for client ID, client secret, a
 
 Run `google-drive` to add or update these values.
 
+Useful Google links:
+
+- Create or restrict API keys: https://console.cloud.google.com/apis/credentials
+- Enable Google Drive API: https://console.cloud.google.com/apis/library/drive.googleapis.com
+- Google Drive scopes reference: https://developers.google.com/workspace/drive/api/guides/api-specific-auth
+- OAuth Playground for refresh tokens: https://developers.google.com/oauthplayground
+
+Minimum setup:
+
+- Public Drive folders: `GOOGLE_DRIVE_API_KEY`; no OAuth scope.
+- Private Drive folder reads: OAuth scope `https://www.googleapis.com/auth/drive.readonly`.
+- Drive output uploads: OAuth scope `https://www.googleapis.com/auth/drive.file`.
+
+AI helper prompt:
+
+```text
+Help me create Google Drive API credentials for Notion Tiller Portal.
+Purpose: allow my Notion Worker to read asset folders from Google Drive and optionally upload finished render outputs to Google Drive.
+I need:
+1. Google Drive API enabled in Google Cloud.
+2. An API key restricted to the Google Drive API for public folder links.
+3. If I need private folders or Drive output uploads, an OAuth 2.0 client ID, client secret, and refresh token.
+Scopes needed:
+- For private folder reads: https://www.googleapis.com/auth/drive.readonly
+- For output uploads: https://www.googleapis.com/auth/drive.file
+Do not ask me to paste secrets into Notion. These values will be saved through the CLI command `notion-tiller-portal google-drive`.
+Walk me step by step through Google Cloud Console and OAuth Playground.
+```
+
 ## After Install
 
 Add Notion database automations:

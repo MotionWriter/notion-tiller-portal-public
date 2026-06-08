@@ -761,6 +761,27 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			codeBlock(`${CLI_COMMAND} credentials`),
 			paragraphBlock("If Google Drive asset links or output uploads fail, run this in Terminal:"),
 			codeBlock(`${CLI_COMMAND} google-drive`),
+			headingBlock("Google Drive credentials"),
+			paragraphBlock("Use Google Drive only when asset folders are too large for Notion uploads or when finished outputs should go to Drive."),
+			paragraphBlock("Create or restrict API keys: https://console.cloud.google.com/apis/credentials"),
+			paragraphBlock("Enable Google Drive API: https://console.cloud.google.com/apis/library/drive.googleapis.com"),
+			paragraphBlock("Google Drive scopes reference: https://developers.google.com/workspace/drive/api/guides/api-specific-auth"),
+			paragraphBlock("OAuth Playground for refresh tokens: https://developers.google.com/oauthplayground"),
+			paragraphBlock("Public Drive folders need GOOGLE_DRIVE_API_KEY and no OAuth scope."),
+			paragraphBlock("Private Drive folder reads need scope https://www.googleapis.com/auth/drive.readonly."),
+			paragraphBlock("Drive output uploads need scope https://www.googleapis.com/auth/drive.file."),
+			paragraphBlock("Copy this into an AI chat if you want step-by-step help:"),
+			codeBlock(`Help me create Google Drive API credentials for Notion Tiller Portal.
+Purpose: allow my Notion Worker to read asset folders from Google Drive and optionally upload finished render outputs to Google Drive.
+I need:
+1. Google Drive API enabled in Google Cloud.
+2. An API key restricted to the Google Drive API for public folder links.
+3. If I need private folders or Drive output uploads, an OAuth 2.0 client ID, client secret, and refresh token.
+Scopes needed:
+- For private folder reads: https://www.googleapis.com/auth/drive.readonly
+- For output uploads: https://www.googleapis.com/auth/drive.file
+Do not ask me to paste secrets into Notion. These values will be saved through the CLI command notion-tiller-portal google-drive.
+Walk me step by step through Google Cloud Console and OAuth Playground.`),
 			paragraphBlock("To review set/missing Worker secrets or delete old values, run this in Terminal:"),
 			codeBlock(`${CLI_COMMAND} secrets`),
 		],
@@ -820,6 +841,20 @@ async function appendSetupInstructions(
 				codeBlock(`${CLI_COMMAND} credentials`),
 				paragraphBlock("To update Google Drive public folder links, private folders, or output uploads, run this in Terminal:"),
 				codeBlock(`${CLI_COMMAND} google-drive`),
+				paragraphBlock("Google links: create keys at https://console.cloud.google.com/apis/credentials, enable Drive API at https://console.cloud.google.com/apis/library/drive.googleapis.com, check scopes at https://developers.google.com/workspace/drive/api/guides/api-specific-auth, and use OAuth Playground at https://developers.google.com/oauthplayground when creating refresh tokens."),
+				paragraphBlock("For public Drive folders use GOOGLE_DRIVE_API_KEY. For private folder reads use scope https://www.googleapis.com/auth/drive.readonly. For Drive output uploads use scope https://www.googleapis.com/auth/drive.file."),
+				paragraphBlock("AI helper prompt:"),
+				codeBlock(`Help me create Google Drive API credentials for Notion Tiller Portal.
+Purpose: allow my Notion Worker to read asset folders from Google Drive and optionally upload finished render outputs to Google Drive.
+I need:
+1. Google Drive API enabled in Google Cloud.
+2. An API key restricted to the Google Drive API for public folder links.
+3. If I need private folders or Drive output uploads, an OAuth 2.0 client ID, client secret, and refresh token.
+Scopes needed:
+- For private folder reads: https://www.googleapis.com/auth/drive.readonly
+- For output uploads: https://www.googleapis.com/auth/drive.file
+Do not ask me to paste secrets into Notion. These values will be saved through the CLI command notion-tiller-portal google-drive.
+Walk me step by step through Google Cloud Console and OAuth Playground.`),
 				paragraphBlock("To see which Worker secrets are set or delete old values, run this in Terminal:"),
 				codeBlock(`${CLI_COMMAND} secrets`),
 				paragraphBlock("To check the install, run this in Terminal:"),
