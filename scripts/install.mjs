@@ -27,6 +27,11 @@ const notionIntegrationUrl = "https://www.notion.so/profile/integrations/interna
 const defaultPortalName = "Tiller Portal";
 const defaultDatabasePrefix = "Tiller";
 const cliCommand = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
+const isWindows = process.platform === "win32";
+const windowsBootstrapCommand = "irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex";
+const unixBootstrapCommand = "curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash";
+const windowsNtnInstallCommand = "npm install --global ntn";
+const unixNtnInstallCommand = "curl -fsSL https://ntn.dev | NTN_INSTALL_DIR=\"$HOME/.local/bin\" bash";
 const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
 const color = {
 	bold: (value) => useColor ? `\x1b[1m${value}\x1b[22m` : value,
@@ -71,7 +76,7 @@ async function main() {
 
 	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
 	checkVersion("npm", ["--version"], 10, "npm 10.9.2 or newer is required.");
-	checkCommand("ntn", ["--version"], "Notion CLI missing. Install it first: curl -fsSL https://ntn.dev | NTN_INSTALL_DIR=\"$HOME/.local/bin\" bash");
+	checkCommand("ntn", ["--version"], `Notion CLI missing. Install it first: ${notionCliInstallCommand()}`);
 	ensureNotionLogin();
 
 	const existingState = readState();
@@ -241,6 +246,14 @@ function printWebhookUrls(webhookUrls) {
 	for (const name of names) {
 		console.log(`- ${name}: ${webhookUrls[name] ?? "not found"}`);
 	}
+}
+
+function notionCliInstallCommand() {
+	return isWindows ? windowsNtnInstallCommand : unixNtnInstallCommand;
+}
+
+function bootstrapCommand() {
+	return isWindows ? windowsBootstrapCommand : unixBootstrapCommand;
 }
 
 function canResumeFromWorkerEnv(state, workersConfig) {
@@ -613,6 +626,12 @@ async function ensureTillerAuth(workersConfig) {
 async function runOnboarding() {
 	console.log("Notion Tiller Portal setup\n");
 	console.log("Daily render work happens in Notion. Terminal is only for setup.\n");
+	console.log("Start command for this computer:");
+	console.log(bootstrapCommand());
+	console.log("");
+	console.log("Notion CLI install if needed:");
+	console.log(notionCliInstallCommand());
+	console.log("");
 
 	const rl = createPrompt();
 	printSection("Step 1 of 3", "Notion setup page");
@@ -641,7 +660,7 @@ function runDoctor() {
 	const issues = [];
 	checkDoctorVersion("node", ["--version"], 22, "Install Node 22 or newer.", issues);
 	checkDoctorVersion("npm", ["--version"], 10, "Install npm 10.9.2 or newer.", issues);
-	checkDoctorCommand("ntn", ["--version"], "Install Notion CLI: curl -fsSL https://ntn.dev | NTN_INSTALL_DIR=\"$HOME/.local/bin\" bash", issues);
+	checkDoctorCommand("ntn", ["--version"], `Install Notion CLI: ${notionCliInstallCommand()}`, issues);
 
 	const auth = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });
 	const authOk = auth.status === 0;

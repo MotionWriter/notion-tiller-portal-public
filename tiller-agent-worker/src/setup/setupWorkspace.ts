@@ -52,6 +52,8 @@ type StarterViewSpec = {
 
 const NOTION_VIEWS_API_VERSION = "2026-03-11";
 const CLI_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
+const WEBHOOKS_COMMAND_MAC_LINUX = `ntn workers webhooks list --workers-config-file "$HOME/.notion-tiller-portal/worker/workers.json"`;
+const WEBHOOKS_COMMAND_WINDOWS = `ntn workers webhooks list --workers-config-file "$env:USERPROFILE\\.notion-tiller-portal\\worker\\workers.json"`;
 
 const STARTER_VIEWS: StarterViewSpec[] = [
 	{
@@ -870,8 +872,11 @@ Walk me step by step through Google Cloud Console and OAuth Playground.`),
 			children: [
 				headingBlock("Notion automation setup"),
 				paragraphBlock("Use these instructions to connect Notion database actions to the Worker webhooks."),
-				paragraphBlock("To print webhook URLs again, run this in Terminal:"),
-				codeBlock(`ntn workers webhooks list --workers-config-file "$HOME/.notion-tiller-portal/worker/workers.json"`),
+				paragraphBlock("To print webhook URLs again, run the command for your operating system."),
+				paragraphBlock("macOS/Linux:"),
+				codeBlock(WEBHOOKS_COMMAND_MAC_LINUX),
+				paragraphBlock("Windows PowerShell:"),
+				codeBlock(WEBHOOKS_COMMAND_WINDOWS),
 				paragraphBlock("Create these Notion database automations:"),
 				paragraphBlock("Templates database: when Action is set to Add to Tiller, Push Update, Check Status, or Sync Data Table, send webhook to templateAction."),
 				paragraphBlock("Work Orders database: when Action is set to Submit to Tiller, Check Status, or Download Results, send webhook to workOrderAction."),

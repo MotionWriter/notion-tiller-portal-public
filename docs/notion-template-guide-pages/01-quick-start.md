@@ -18,6 +18,14 @@ You need:
 
 ## Install Command
 
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex
+```
+
+macOS/Linux:
+
 ```shell
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
@@ -33,6 +41,8 @@ Then rerun bootstrap or run:
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal install
 ```
+
+Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux can use the Notion install script.
 
 ## First Run Checklist
 

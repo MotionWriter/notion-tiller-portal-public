@@ -4,13 +4,23 @@ Portable Notion + Tiller portal scaffold.
 
 ## Fast Start
 
-Create one blank Notion setup page, then run:
+Create one blank Notion setup page, then run the command for your computer.
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex
+```
+
+macOS/Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
-The bootstrap checks Node/npm, installs the Notion CLI if needed, logs into Notion, shows onboarding, then starts install. If Node is missing or too old, it stops and prints a copy/paste install command.
+The bootstrap checks Node/npm, installs the Notion CLI if needed, logs into Notion, shows onboarding, then starts install. If Node is missing or too old, it stops and prints the install/update instruction.
+
+Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux can use the Notion install script.
 
 ## What Users Need
 
