@@ -924,7 +924,15 @@ async function appendWebhookUrlInstructions(
 }
 
 function webhookUrlBlocks(label: string, help: string, url?: string) {
-	if (!url) return [paragraphBlock(`${label}: not found. Run ntn workers webhooks list to inspect Worker webhooks.`)];
+	if (!url) {
+		return [
+			paragraphBlock(`${label}: not found. Run the webhook list command for your operating system to inspect Worker webhooks.`),
+			paragraphBlock("macOS/Linux:"),
+			codeBlock(WEBHOOKS_COMMAND_MAC_LINUX),
+			paragraphBlock("Windows PowerShell:"),
+			codeBlock(WEBHOOKS_COMMAND_WINDOWS),
+		];
+	}
 	return [
 		paragraphBlock(label),
 		paragraphBlock(help),
@@ -965,7 +973,8 @@ function nextSteps(configDataSourceId: string) {
 	return [
 		`Set TILLER_PORTAL_CONFIG_DATA_SOURCE_ID=${configDataSourceId}`,
 		"Set TILLER_EMAIL and TILLER_PASSWORD as Worker env vars.",
-		"Run ntn workers webhooks list.",
+		`Run webhook list command. macOS/Linux: ${WEBHOOKS_COMMAND_MAC_LINUX}`,
+		`Run webhook list command. Windows PowerShell: ${WEBHOOKS_COMMAND_WINDOWS}`,
 		"Add Notion database automations for templateAction, workOrderAction, and campaignAction.",
 		"Use cavalryWorkOrderStarted as the Cavalry destination when needed.",
 	];

@@ -825,7 +825,7 @@ function ensureNotionLogin() {
 	run("ntn", ["login"]);
 	const verified = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });
 	if (verified.status !== 0) {
-		throw new Error("Notion CLI login did not complete. Run `ntn doctor` for details.");
+		throw new Error("Notion CLI login did not complete. After confirming in the browser, run `ntn login poll`, then rerun the installer.");
 	}
 	console.log("ntn auth: ok");
 }

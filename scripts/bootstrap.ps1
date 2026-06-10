@@ -11,6 +11,37 @@ function Test-Command($Name) {
 	$null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Add-NpmGlobalPath {
+	$prefix = npm prefix --global 2>$null
+	if ($LASTEXITCODE -ne 0 -or -not $prefix) {
+		return
+	}
+	$prefix = ($prefix | Select-Object -First 1).Trim()
+	if ((Test-Path $prefix) -and (($env:Path -split ";") -notcontains $prefix)) {
+		$env:Path = "$prefix;$env:Path"
+	}
+}
+
+function Get-NtnCommand {
+	$cmd = Get-Command "ntn.cmd" -ErrorAction SilentlyContinue
+	if ($cmd) {
+		return $cmd.Source
+	}
+	$cmd = Get-Command "ntn" -ErrorAction SilentlyContinue
+	if ($cmd) {
+		return $cmd.Source
+	}
+	return $null
+}
+
+function Invoke-Ntn($CommandArgs) {
+	$ntn = Get-NtnCommand
+	if (-not $ntn) {
+		throw "Notion CLI command ntn was not found on PATH."
+	}
+	& $ntn @CommandArgs
+}
+
 function Get-MajorVersion($Command, $CommandArgs) {
 	$output = & $Command @CommandArgs 2>$null
 	if ($LASTEXITCODE -ne 0 -or -not $output) {
@@ -55,17 +86,28 @@ if ($null -eq $npmMajor -or $npmMajor -lt 10) {
 Write-Host "node: $(node --version)"
 Write-Host "npm: $(npm --version)"
 
-if (-not (Test-Command "ntn")) {
+Add-NpmGlobalPath
+
+if (-not (Get-NtnCommand)) {
 	Write-Step "Installing Notion CLI with npm..."
 	npm install --global ntn
+	Add-NpmGlobalPath
 }
 
-Write-Host "ntn: $(ntn --version)"
+$ntnCommand = Get-NtnCommand
+if (-not $ntnCommand) {
+	Write-Host "Notion CLI installed, but ntn is not available in this PowerShell session."
+	Write-Host "Close and reopen PowerShell, then rerun:"
+	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+	exit 1
+}
+
+Write-Host "ntn: $(& $ntnCommand --version)"
 
 Write-Step "Checking Notion CLI login..."
-ntn api v1/users/me *> $null
+Invoke-Ntn -CommandArgs @("api", "v1/users/me") *> $null
 if ($LASTEXITCODE -ne 0) {
-	ntn login
+	Invoke-Ntn -CommandArgs @("login")
 	Write-Host ""
 	Write-Host "After confirming in the browser, run:"
 	Write-Host "  ntn login poll"

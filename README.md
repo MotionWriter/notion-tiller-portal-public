@@ -18,7 +18,7 @@ macOS/Linux:
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
-The bootstrap checks Node/npm, installs the Notion CLI if needed, logs into Notion, shows onboarding, then starts install. If Node is missing or too old, it stops and prints the install/update instruction.
+The bootstrap checks Node/npm, installs the Notion CLI if needed, checks Notion login, then starts the guided installer. If Node is missing or too old, it stops and prints the install/update instruction.
 
 Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux can use the Notion install script.
 
