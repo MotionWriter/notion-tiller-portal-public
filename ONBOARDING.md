@@ -24,10 +24,10 @@ Ask them to have:
 
 - A Notion workspace where Workers are enabled
 - Tiller email/password
-- A Mac or Linux terminal
+- Terminal on macOS/Linux or PowerShell on Windows
 - Node.js 22+ if possible
 
-If Node is missing, the bootstrap stops and prints a copy/paste install command.
+If Node is missing on Windows, the bootstrap asks whether to install Node.js 22 LTS with `winget`. If the user says no, or `winget` is not available, it prints the Node download page.
 
 ## Step 1: Create The Setup Page
 
@@ -57,10 +57,16 @@ The installer also prints this link when it asks for the token.
 
 ## Step 3: Run The Bootstrap
 
-In Terminal, run:
+On macOS/Linux, run:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
+```
+
+On Windows PowerShell, run:
+
+```powershell
+irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex
 ```
 
 What they should see:
@@ -83,13 +89,17 @@ Do this in order:
 ntn login poll
 ```
 
-- Rerun bootstrap:
+- Rerun bootstrap for their computer:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
-If Node is missing, install Node using the command it prints, then rerun bootstrap.
+```powershell
+irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex
+```
+
+If Node is missing on Windows, choose whether to let bootstrap install Node with `winget`. After Node installs, close and reopen PowerShell, then rerun bootstrap.
 
 ## Step 4: Answer Installer Prompts
 
@@ -203,4 +213,4 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 - `Workers enabled`: enable Workers in Notion workspace settings.
 - `Missing NOTION_API_TOKEN`: rerun installer and update the Notion token when asked.
 - `Tiller auth failed`: run `credentials` and update Tiller credentials.
-- Node missing or old: use the command printed by bootstrap, then rerun bootstrap.
+- Node missing or old: on Windows, let bootstrap install Node with `winget`, or install from the Node website, then rerun bootstrap.

@@ -54,17 +54,45 @@ function Get-MajorVersion($Command, $CommandArgs) {
 	return [int]$match.Value
 }
 
-function Write-NodeInstallHelp {
-	Write-Host "Node.js 22+ and npm are required."
-	Write-Host ""
-	Write-Host "Recommended Windows install:"
-	Write-Host "  winget install OpenJS.NodeJS.LTS"
-	Write-Host ""
-	Write-Host "If winget is not available, install Node.js 22+ from:"
+function Write-NodeManualInstallHelp {
+	Write-Host "Open this page to install Node.js 22+ LTS:"
 	Write-Host "  https://nodejs.org"
+	Write-Host ""
+	Write-Host "npm is included with Node.js."
 	Write-Host ""
 	Write-Host "After installing Node, close and reopen PowerShell, then rerun:"
 	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+}
+
+function Resolve-NodeRequirement($Reason) {
+	Write-Host $Reason
+	Write-Host ""
+	Write-Host "Node.js 22+ and npm are required to move forward."
+	Write-Host ""
+
+	if (Test-Command "winget") {
+		Write-Host "You can install Node.js from:"
+		Write-Host "  https://nodejs.org"
+		Write-Host ""
+		$answer = Read-Host "Or install Node.js 22 LTS now with winget? [y/N]"
+		if ($answer -match "^(y|yes)$") {
+			Write-Step "Installing Node.js 22 LTS with winget..."
+			winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
+			if ($LASTEXITCODE -eq 0) {
+				Write-Host ""
+				Write-Host "Node.js install finished."
+				Write-Host "Close and reopen PowerShell, then rerun:"
+				Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+				return
+			}
+			Write-Host ""
+			Write-Host "winget install did not complete successfully."
+		}
+	} else {
+		Write-Host "winget is not available in this PowerShell session."
+	}
+
+	Write-NodeManualInstallHelp
 }
 
 Write-Host "Notion Tiller Portal bootstrap"
@@ -74,21 +102,19 @@ Write-Host "Daily render work happens in Notion after setup."
 Write-Host ""
 
 if (-not (Test-Command "node") -or -not (Test-Command "npm")) {
-	Write-NodeInstallHelp
+	Resolve-NodeRequirement "Node.js or npm was not found."
 	exit 1
 }
 
 $nodeMajor = Get-MajorVersion "node" @("--version")
 if ($null -eq $nodeMajor -or $nodeMajor -lt 22) {
-	Write-Host "Node.js 22+ is required. Found: $(node --version)"
-	Write-NodeInstallHelp
+	Resolve-NodeRequirement "Node.js 22+ is required. Found: $(node --version)"
 	exit 1
 }
 
 $npmMajor = Get-MajorVersion "npm" @("--version")
 if ($null -eq $npmMajor -or $npmMajor -lt 10) {
-	Write-Host "npm 10+ is required. Found: $(npm --version)"
-	Write-NodeInstallHelp
+	Resolve-NodeRequirement "npm 10+ is required. Found: $(npm --version)"
 	exit 1
 }
 
