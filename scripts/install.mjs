@@ -77,6 +77,7 @@ async function main() {
 
 	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
 	checkVersion("npm", ["--version"], 10, "npm 10.9.2 or newer is required.");
+	checkCommand("git", ["--version"], "Git is required because npm fetches this installer from GitHub.");
 	checkCommand("ntn", ["--version"], `Notion CLI missing. Install it first: ${notionCliInstallCommand()}`);
 	ensureNotionLogin();
 
@@ -661,6 +662,7 @@ function runDoctor() {
 	const issues = [];
 	checkDoctorVersion("node", ["--version"], 22, "Install Node 22 or newer.", issues);
 	checkDoctorVersion("npm", ["--version"], 10, "Install npm 10.9.2 or newer.", issues);
+	checkDoctorCommand("git", ["--version"], "Install Git, then close and reopen Terminal or PowerShell.", issues);
 	checkDoctorCommand("ntn", ["--version"], `Install Notion CLI: ${notionCliInstallCommand()}`, issues);
 
 	const auth = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });

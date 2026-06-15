@@ -18,7 +18,7 @@ macOS/Linux:
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
-The bootstrap checks Node/npm, installs the Notion CLI if needed, checks Notion login, then starts the guided installer. On macOS it can install Node.js 22 with Homebrew when available; on Windows it can install Node.js 22 LTS with `winget`. The Node website remains the manual fallback.
+The bootstrap checks Node/npm/Git, installs the Notion CLI if needed, checks Notion login, then starts the guided installer. On macOS it can install Node.js 22 or Git with Homebrew when available; on Windows it can install Node.js 22 LTS or Git with `winget`. Manual download pages remain the fallback.
 
 If Notion login pauses the flow, open the printed browser URL, confirm the code, run the exact `login poll` command bootstrap prints, then rerun the bootstrap command for your computer.
 
@@ -31,6 +31,7 @@ Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux ca
 - A Notion internal integration token
 - Tiller email/password
 - Node.js 22+ installed locally
+- Git installed locally
 - Optional Google Drive API key for public asset folder links
 - Optional Google Drive OAuth credentials for private folders or Drive output uploads
 

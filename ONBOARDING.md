@@ -26,8 +26,9 @@ Ask them to have:
 - Tiller email/password
 - Terminal on macOS/Linux or PowerShell on Windows
 - Node.js 22+ if possible
+- Git if possible
 
-If Node is missing, the bootstrap offers an in-terminal install path when possible: Homebrew on macOS, `winget` on Windows. If the user says no, or the package manager is not available, it prints the Node download page.
+If Node or Git is missing, the bootstrap offers an in-terminal install path when possible: Homebrew on macOS, `winget` on Windows. If the user says no, or the package manager is not available, it prints the download page.
 
 ## Step 1: Create The Setup Page
 
@@ -72,13 +73,14 @@ irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/m
 What they should see:
 
 - Node/npm check
+- Git check
 - Notion CLI install if missing
 - Notion CLI login if needed
 - Guided installer prompts
 
 If Notion CLI login is needed, the bootstrap stops after printing a browser login URL.
 
-Important: Node install and Notion login are separate stops. If bootstrap just installed Node, do not run a login poll command. Close and reopen Terminal or PowerShell, then rerun bootstrap.
+Important: Node/Git install and Notion login are separate stops. If bootstrap just installed Node or Git, do not run a login poll command. Close and reopen Terminal or PowerShell, then rerun bootstrap.
 
 Do this in order:
 
@@ -104,7 +106,7 @@ curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-p
 irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex
 ```
 
-If Node is missing, choose whether to let bootstrap install Node with Homebrew on macOS or `winget` on Windows. After Node installs, close and reopen Terminal or PowerShell, then rerun bootstrap.
+If Node or Git is missing, choose whether to let bootstrap install it with Homebrew on macOS or `winget` on Windows. After install, close and reopen Terminal or PowerShell, then rerun bootstrap.
 
 ## Step 4: Answer Installer Prompts
 
@@ -219,3 +221,4 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 - `Missing NOTION_API_TOKEN`: rerun installer and update the Notion token when asked.
 - `Tiller auth failed`: run `credentials` and update Tiller credentials.
 - Node missing or old: let bootstrap install Node with Homebrew on macOS or `winget` on Windows, or install from the Node website, then rerun bootstrap.
+- Git missing: let bootstrap install Git with Homebrew on macOS or `winget` on Windows, or install from the Git website, then rerun bootstrap.

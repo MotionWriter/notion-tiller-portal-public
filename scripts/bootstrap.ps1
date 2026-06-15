@@ -29,6 +29,18 @@ function Get-NpmCommand {
 	return $null
 }
 
+function Get-GitCommand {
+	$cmd = Get-Command "git.exe" -ErrorAction SilentlyContinue
+	if ($cmd) {
+		return $cmd.Source
+	}
+	$cmd = Get-Command "git" -ErrorAction SilentlyContinue
+	if ($cmd) {
+		return $cmd.Source
+	}
+	return $null
+}
+
 function Invoke-Npm($CommandArgs) {
 	$npm = Get-NpmCommand
 	if (-not $npm) {
@@ -50,6 +62,48 @@ function Add-NpmGlobalPath {
 	if ((Test-Path $prefix) -and (($env:Path -split ";") -notcontains $prefix)) {
 		$env:Path = "$prefix;$env:Path"
 	}
+}
+
+function Write-GitManualInstallHelp {
+	Write-Host "Open this page to install Git for Windows:"
+	Write-Host "  https://git-scm.com/download/win"
+	Write-Host ""
+	Write-Host "Git is required because npm fetches this installer from GitHub."
+	Write-ActionNeeded "After Git installs, do NOT run a login poll command yet."
+	Write-Host "Close and reopen PowerShell, then rerun this bootstrap command:"
+	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+}
+
+function Resolve-GitRequirement {
+	Write-Host "Git was not found on PATH."
+	Write-Host ""
+	Write-Host "Git is required because npm fetches this installer from GitHub."
+	Write-Host ""
+
+	if (Test-Command "winget") {
+		Write-Host "You can install Git from:"
+		Write-Host "  https://git-scm.com/download/win"
+		Write-Host ""
+		$answer = Read-Host "Or install Git for Windows now with winget? [y/N]"
+		if ($answer -match "^(y|yes)$") {
+			Write-Step "Installing Git for Windows with winget..."
+			winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+			if ($LASTEXITCODE -eq 0) {
+				Write-Host ""
+				Write-Host "Git install finished."
+				Write-ActionNeeded "Do NOT run a login poll command yet."
+				Write-Host "Close and reopen PowerShell, then rerun this bootstrap command:"
+				Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+				return
+			}
+			Write-Host ""
+			Write-Host "winget install did not complete successfully."
+		}
+	} else {
+		Write-Host "winget is not available in this PowerShell session."
+	}
+
+	Write-GitManualInstallHelp
 }
 
 function Get-NtnCommand {
@@ -174,6 +228,14 @@ if ($null -eq $npmMajor -or $npmMajor -lt 10) {
 
 Write-Host "node: $(node --version)"
 Write-Host "npm: $(& $npmCommand --version)"
+
+$gitCommand = Get-GitCommand
+if (-not $gitCommand) {
+	Resolve-GitRequirement
+	exit 1
+}
+
+Write-Host "git: $(& $gitCommand --version)"
 
 Add-NpmGlobalPath
 

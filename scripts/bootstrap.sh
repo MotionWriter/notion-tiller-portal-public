@@ -49,6 +49,23 @@ manual_node_help() {
 	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
 }
 
+manual_git_help() {
+	echo "Open this page to install Git:"
+	case "$(uname -s)" in
+		Darwin)
+			echo "  https://git-scm.com/download/mac"
+			;;
+		*)
+			echo "  https://git-scm.com/downloads"
+			;;
+	esac
+	echo
+	echo "Git is required because npm fetches this installer from GitHub."
+	action_needed "After Git installs, do NOT run ntn login poll yet."
+	echo "Close and reopen Terminal, then rerun this bootstrap command:"
+	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
+}
+
 resolve_node_requirement() {
 	local reason="$1"
 	echo "$reason"
@@ -84,6 +101,40 @@ resolve_node_requirement() {
 	manual_node_help
 }
 
+resolve_git_requirement() {
+	echo "Git was not found on PATH."
+	echo
+	echo "Git is required because npm fetches this installer from GitHub."
+	echo
+
+	if [[ "$(uname -s)" == "Darwin" ]] && need_cmd brew; then
+		echo "You can install Git from:"
+		echo "  https://git-scm.com/download/mac"
+		echo
+		read -r -p "Or install Git now with Homebrew? [y/N] " answer
+		if [[ "$answer" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+			echo
+			echo "Installing Git with Homebrew..."
+			if brew install git; then
+				echo
+				echo "Git install finished."
+				action_needed "Do NOT run ntn login poll yet."
+				echo "Close and reopen Terminal, then rerun this bootstrap command:"
+				echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
+				return
+			fi
+			echo
+			echo "Homebrew install did not complete successfully."
+		fi
+	elif [[ "$(uname -s)" == "Darwin" ]]; then
+		echo "Homebrew was not found on this Mac."
+	else
+		echo "Automatic Git install is not enabled for this OS."
+	fi
+
+	manual_git_help
+}
+
 if ! need_cmd node || ! need_cmd npm; then
 	resolve_node_requirement "Node.js or npm was not found."
 	exit 1
@@ -103,6 +154,13 @@ fi
 
 echo "node: $(node --version)"
 echo "npm: $(npm --version)"
+
+if ! need_cmd git; then
+	resolve_git_requirement
+	exit 1
+fi
+
+echo "git: $(git --version)"
 
 mkdir -p "$NTN_INSTALL_DIR"
 export PATH="$NTN_INSTALL_DIR:$PATH"
