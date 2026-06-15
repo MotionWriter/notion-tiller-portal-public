@@ -734,7 +734,7 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
   B --> C{Template Ready?}
   C -- Needs assets --> D[Add assets / Push Update]
   D --> C
-  C -- Ready --> E[Action: Sync Data Table]
+  C -- Ready --> E[Action: Create Data Table]
   E --> F[Add rows in template data table]
   F --> G[Create Campaign and link Template]
   G --> H{Need CSV review?}
@@ -748,7 +748,7 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			paragraphBlock("Open Templates, create a row, attach the Cavalry file in Cav File, then set Action to Add to Tiller."),
 			paragraphBlock("If Tiller needs assets, add them to the Template Assets URL or Upload rows, then set Action to Push Update."),
 			headingBlock("2. Sync the Template data table"),
-			paragraphBlock("When the Template is Ready, set Action to Sync Data Table. This creates a template-specific data rows database from Tiller CSV Columns."),
+			paragraphBlock("When the Template is Ready, set Action to Create Data Table. This creates a template-specific data rows database from Tiller CSV Columns."),
 			paragraphBlock("Each Template has its own data table. Do not use a generic campaign data table."),
 			headingBlock("3. Add Campaign rows"),
 			paragraphBlock("Open the Template data table, add rows, link _Campaign to the Campaign, and check _Include in Render for each row that should render."),
@@ -879,7 +879,7 @@ Walk me step by step through Google Cloud Console and OAuth Playground.`),
 				paragraphBlock("Windows PowerShell:"),
 				codeBlock(WEBHOOKS_COMMAND_WINDOWS),
 				paragraphBlock("Create these Notion database automations:"),
-				paragraphBlock("Templates database: when Action is set to Add to Tiller, Push Update, Check Status, or Sync Data Table, send webhook to templateAction."),
+				paragraphBlock("Templates database: when Action is set to Add to Tiller, Push Update, Check Status, or Create Data Table, send webhook to templateAction."),
 				paragraphBlock("Work Orders database: when Action is set to Submit to Tiller, Check Status, or Download Results, send webhook to workOrderAction."),
 				paragraphBlock("Campaigns database: when Action is set to Validate, Build CSV, or Submit Render, send webhook to campaignAction."),
 				paragraphBlock("For each Send webhook action: paste the matching webhook URL, leave custom headers empty, and check Select all existing properties under Content."),
@@ -895,7 +895,7 @@ Walk me step by step through Google Cloud Console and OAuth Playground.`),
 			block_id: settingsPageId,
 			children: [
 				headingBlock("Campaign data setup"),
-				paragraphBlock("Each Template owns its own data rows database. Open a Template and set Action to Sync Data Table to create that database from Tiller CSV Columns. Add campaign rows there, link _Campaign to the Campaign, check _Include in Render, and keep CSV column names exactly matched to the Template."),
+				paragraphBlock("Each Template owns its own data rows database. Open a Template and set Action to Create Data Table to create that database from Tiller CSV Columns. Add campaign rows there, link _Campaign to the Campaign, check _Include in Render, and keep CSV column names exactly matched to the Template."),
 				paragraphBlock("Templates, Work Orders, and Campaigns have _Progress, _Milestone, and _Progress Note fields for live action feedback. Keep these near Action in your views."),
 			],
 		});

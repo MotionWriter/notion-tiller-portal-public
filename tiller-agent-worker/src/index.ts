@@ -857,7 +857,7 @@ async function validateCampaignFromPage({
 	}
 
 	if (csvColumns.length > 0 && !template?.dataRowsDatabaseId) {
-		errors.push("Linked Template does not have a data rows database yet. Open the Template, set Action to Sync Data Table, then add campaign rows to that template-specific database.");
+		errors.push("Linked Template does not have a data rows database yet. Open the Template, set Action to Create Data Table, then add campaign rows to that template-specific database.");
 	}
 	const rowsDataSourceLabel = `the template data rows database for "${template?.name || "this template"}"`;
 	const rows: CampaignDataRowSummary[] = csvColumns.length > 0 && template?.dataRowsDatabaseId
@@ -1138,7 +1138,7 @@ async function submitTemplateFromPage({
 		pageId,
 		pendingAssets.length > 0 ? 85 : 100,
 		pendingAssets.length > 0 ? "Waiting on Assets" : "Ready",
-		pendingAssets.length > 0 ? "Template created. Upload required assets." : "Template created and ready.",
+		pendingAssets.length > 0 ? "Template created. Upload required assets." : "Template created and ready. You can now create a database for this template using the Action field.",
 	);
 
 	return {
@@ -1235,7 +1235,7 @@ async function syncTemplateDataTableFromPage({
 		details = await buildTemplateSetupDetails(client, summary.tillerTemplateId, {});
 	}
 	if (!details) {
-		throw new Error("Template Details are missing. Use Add to Tiller or Check Status before Sync Data Table.");
+		throw new Error("Template Details are missing. Use Add to Tiller or Check Status before Create Data Table.");
 	}
 
 	const csvParameters = getTemplateCsvParameters(details)
@@ -1311,7 +1311,7 @@ async function runTemplateActionFromPage({
 	if (summary.action === "Check Status") {
 		return checkTemplateStatusFromPage({ notion, pageId });
 	}
-	if (summary.action === "Sync Data Table") {
+	if (summary.action === "Create Data Table" || summary.action === "Sync Data Table") {
 		return syncTemplateDataTableFromPage({ notion, pageId });
 	}
 	if (
@@ -3790,7 +3790,7 @@ async function queryCampaignDataRows({
 	csvColumns: string[];
 		dataSourceId: string;
 	}) {
-		if (!dataSourceId) throw new Error("Template data rows database is missing. Open the linked Template and run Sync Data Table.");
+		if (!dataSourceId) throw new Error("Template data rows database is missing. Open the linked Template and run Create Data Table.");
 		const rows: CampaignDataRowSummary[] = [];
 		let cursor: string | undefined;
 		do {

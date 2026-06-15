@@ -152,7 +152,7 @@ Create these Notion database automations:
 
 | Database | Trigger | Send webhook URL |
 | --- | --- | --- |
-| Templates | `Action` is set to `Add to Tiller`, `Push Update`, `Check Status`, or `Sync Data Table` | `templateAction` |
+| Templates | `Action` is set to `Add to Tiller`, `Push Update`, `Check Status`, or `Create Data Table` | `templateAction` |
 | Work Orders | `Action` is set to `Submit to Tiller`, `Check Status`, or `Download Results` | `workOrderAction` |
 | Campaigns | `Action` is set to `Validate`, `Build CSV`, or `Submit Render` | `campaignAction` |
 

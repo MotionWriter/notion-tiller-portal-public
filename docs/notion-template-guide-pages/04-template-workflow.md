@@ -24,8 +24,8 @@ If Tiller returns missing assets:
 
 Worker validates all files before uploading. If one required file is missing or mismatched, it uploads nothing and explains what to fix.
 
-## Sync Data Table
+## Create Data Table
 
-When Template status is Ready, set `Action` to `Sync Data Table`.
+When Template status is Ready, set `Action` to `Create Data Table`.
 
 This creates a Template-specific data rows database because every Template can have different CSV columns.

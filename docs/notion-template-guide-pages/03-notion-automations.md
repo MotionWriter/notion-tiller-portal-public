@@ -12,7 +12,7 @@ Create Notion database automations that watch each `Action` field.
 
 | Database | Trigger Values | Webhook |
 | --- | --- | --- |
-| Templates | `Add to Tiller`, `Push Update`, `Check Status`, `Sync Data Table` | `templateAction` |
+| Templates | `Add to Tiller`, `Push Update`, `Check Status`, `Create Data Table` | `templateAction` |
 | Campaigns | `Validate`, `Build CSV`, `Submit Render` | `campaignAction` |
 | Work Orders | `Submit to Tiller`, `Check Status`, `Download Results` | `workOrderAction` |
 

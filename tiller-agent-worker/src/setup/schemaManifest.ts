@@ -75,7 +75,7 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 			{ name: "Cav File", type: "files" },
 			{ name: "Template Assets URL", type: "url" },
 			{ name: "Status", type: "select", options: ["Draft", "PendingAssets", "Ready", "Failed", "Archived", "Unknown"] },
-			{ name: "Action", type: "select", options: ["None", "Add to Tiller", "Push Update", "Check Status", "Sync Data Table"] },
+			{ name: "Action", type: "select", options: ["None", "Add to Tiller", "Push Update", "Check Status", "Create Data Table"] },
 			{ name: "_Milestone", type: "select", options: PROGRESS_MILESTONES },
 			{ name: "_Progress Note", type: "rich_text" },
 			{ name: "_Progress", type: "number" },
