@@ -76,7 +76,7 @@ async function main() {
 	console.log(color.dim("Daily render work happens in Notion. Terminal is only for setup.\n"));
 
 	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
-	checkVersion("npm", ["--version"], 10, "npm 10.9.2 or newer is required.");
+	checkVersion("npm", ["--version"], 10, "npm 10 or newer is required.");
 	checkCommand("git", ["--version"], "Git is required because npm fetches this installer from GitHub.");
 	checkCommand("ntn", ["--version"], `Notion CLI missing. Install it first: ${notionCliInstallCommand()}`);
 	ensureNotionLogin();
@@ -661,7 +661,7 @@ function runDoctor() {
 	console.log("Notion Tiller Portal doctor\n");
 	const issues = [];
 	checkDoctorVersion("node", ["--version"], 22, "Install Node 22 or newer.", issues);
-	checkDoctorVersion("npm", ["--version"], 10, "Install npm 10.9.2 or newer.", issues);
+	checkDoctorVersion("npm", ["--version"], 10, "Install npm 10 or newer.", issues);
 	checkDoctorCommand("git", ["--version"], "Install Git, then close and reopen Terminal or PowerShell.", issues);
 	checkDoctorCommand("ntn", ["--version"], `Install Notion CLI: ${notionCliInstallCommand()}`, issues);
 
