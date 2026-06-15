@@ -54,6 +54,19 @@ function Get-MajorVersion($Command, $CommandArgs) {
 	return [int]$match.Value
 }
 
+function Write-NodeInstallHelp {
+	Write-Host "Node.js 22+ and npm are required."
+	Write-Host ""
+	Write-Host "Recommended Windows install:"
+	Write-Host "  winget install OpenJS.NodeJS.LTS"
+	Write-Host ""
+	Write-Host "If winget is not available, install Node.js 22+ from:"
+	Write-Host "  https://nodejs.org"
+	Write-Host ""
+	Write-Host "After installing Node, close and reopen PowerShell, then rerun:"
+	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+}
+
 Write-Host "Notion Tiller Portal bootstrap"
 Write-Host ""
 Write-Host "This gets your terminal ready, then starts the guided installer."
@@ -61,25 +74,21 @@ Write-Host "Daily render work happens in Notion after setup."
 Write-Host ""
 
 if (-not (Test-Command "node") -or -not (Test-Command "npm")) {
-	Write-Host "Node.js and npm are required."
-	Write-Host "Install Node.js 22+ from https://nodejs.org, then rerun this command."
-	Write-Host ""
-	Write-Host "After installing Node, rerun:"
-	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+	Write-NodeInstallHelp
 	exit 1
 }
 
 $nodeMajor = Get-MajorVersion "node" @("--version")
 if ($null -eq $nodeMajor -or $nodeMajor -lt 22) {
 	Write-Host "Node.js 22+ is required. Found: $(node --version)"
-	Write-Host "Update Node.js from https://nodejs.org, then rerun this command."
+	Write-NodeInstallHelp
 	exit 1
 }
 
 $npmMajor = Get-MajorVersion "npm" @("--version")
 if ($null -eq $npmMajor -or $npmMajor -lt 10) {
 	Write-Host "npm 10+ is required. Found: $(npm --version)"
-	Write-Host "Update Node.js from https://nodejs.org, then rerun this command."
+	Write-NodeInstallHelp
 	exit 1
 }
 
