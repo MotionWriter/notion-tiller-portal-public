@@ -19,6 +19,12 @@ echo "This gets your terminal ready, then starts the guided installer."
 echo "Daily render work happens in Notion after setup."
 echo
 
+action_needed() {
+	echo
+	printf '\033[1;33m>>> ACTION NEEDED <<<\033[0m\n'
+	printf '\033[1;33m%s\033[0m\n' "$1"
+}
+
 need_cmd() {
 	if ! command -v "$1" >/dev/null 2>&1; then
 		return 1
@@ -38,8 +44,8 @@ manual_node_help() {
 	echo "  https://nodejs.org"
 	echo
 	echo "npm is included with Node.js."
-	echo
-	echo "After installing Node, close and reopen Terminal, then rerun:"
+	action_needed "After Node installs, do NOT run ntn login poll yet."
+	echo "Close and reopen Terminal, then rerun this bootstrap command:"
 	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
 }
 
@@ -61,7 +67,8 @@ resolve_node_requirement() {
 			if brew install node@22; then
 				echo
 				echo "Node.js install finished."
-				echo "Close and reopen Terminal, then rerun:"
+				action_needed "Do NOT run ntn login poll yet."
+				echo "Close and reopen Terminal, then rerun this bootstrap command:"
 				echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
 				return
 			fi
@@ -114,7 +121,7 @@ fi
 
 if [ -z "$NTN_CMD" ]; then
 	echo "Notion CLI installed, but ntn is not available in this Terminal session."
-	echo "Close and reopen Terminal, then rerun:"
+	action_needed "Close and reopen Terminal, then rerun this bootstrap command:"
 	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
 	exit 1
 fi
@@ -125,8 +132,8 @@ echo
 echo "Checking Notion CLI login..."
 if ! "$NTN_CMD" api v1/users/me >/dev/null 2>&1; then
 	"$NTN_CMD" login || true
-	echo
-	echo "After confirming in the browser, run:"
+	action_needed "Only now should you run ntn login poll."
+	echo "After confirming the browser code, run:"
 	echo "  \"$NTN_CMD\" login poll"
 	echo
 	echo "Then rerun this bootstrap command:"

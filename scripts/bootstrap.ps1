@@ -7,6 +7,12 @@ function Write-Step($Message) {
 	Write-Host $Message
 }
 
+function Write-ActionNeeded($Message) {
+	Write-Host ""
+	Write-Host ">>> ACTION NEEDED <<<" -ForegroundColor Yellow
+	Write-Host $Message -ForegroundColor Yellow
+}
+
 function Test-Command($Name) {
 	$null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
@@ -59,8 +65,8 @@ function Write-NodeManualInstallHelp {
 	Write-Host "  https://nodejs.org"
 	Write-Host ""
 	Write-Host "npm is included with Node.js."
-	Write-Host ""
-	Write-Host "After installing Node, close and reopen PowerShell, then rerun:"
+	Write-ActionNeeded "After Node installs, do NOT run ntn login poll yet."
+	Write-Host "Close and reopen PowerShell, then rerun this bootstrap command:"
 	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
 }
 
@@ -81,7 +87,8 @@ function Resolve-NodeRequirement($Reason) {
 			if ($LASTEXITCODE -eq 0) {
 				Write-Host ""
 				Write-Host "Node.js install finished."
-				Write-Host "Close and reopen PowerShell, then rerun:"
+				Write-ActionNeeded "Do NOT run ntn login poll yet."
+				Write-Host "Close and reopen PowerShell, then rerun this bootstrap command:"
 				Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
 				return
 			}
@@ -132,7 +139,7 @@ if (-not (Get-NtnCommand)) {
 $ntnCommand = Get-NtnCommand
 if (-not $ntnCommand) {
 	Write-Host "Notion CLI installed, but ntn is not available in this PowerShell session."
-	Write-Host "Close and reopen PowerShell, then rerun:"
+	Write-ActionNeeded "Close and reopen PowerShell, then rerun this bootstrap command:"
 	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
 	exit 1
 }
@@ -143,8 +150,8 @@ Write-Step "Checking Notion CLI login..."
 Invoke-Ntn -CommandArgs @("api", "v1/users/me") *> $null
 if ($LASTEXITCODE -ne 0) {
 	Invoke-Ntn -CommandArgs @("login")
-	Write-Host ""
-	Write-Host "After confirming in the browser, run:"
+	Write-ActionNeeded "Only now should you run ntn login poll."
+	Write-Host "After confirming the browser code, run:"
 	Write-Host "  ntn login poll"
 	Write-Host ""
 	Write-Host "Then rerun this bootstrap command:"

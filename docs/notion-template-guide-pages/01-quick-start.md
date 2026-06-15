@@ -30,6 +30,8 @@ macOS/Linux:
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
+If bootstrap just installed Node, stop there. Close and reopen Terminal or PowerShell, then rerun bootstrap. Do not run `ntn login poll` yet.
+
 If bootstrap pauses after Notion login, run the command for your computer.
 
 macOS/Linux:
@@ -59,6 +61,6 @@ Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux ca
 |  | Create setup page. |
 |  | Share setup page with Notion integration. |
 |  | Run installer. |
-|  | Save webhook URLs to Settings when prompted. |
+|  | Confirm webhook URLs appear in Settings. |
 |  | Create Notion automations. |
 |  | Run `doctor`. |
