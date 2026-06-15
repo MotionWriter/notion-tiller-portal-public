@@ -930,16 +930,65 @@ function spawnSpec(command, args) {
 		return { command: process.execPath, args: [process.env.npm_execpath, ...args] };
 	}
 	if (isWindows && command === "ntn") {
-		const ntn = resolveWindowsNtnCommand();
-		if (ntn?.toLowerCase().endsWith(".ps1")) {
-			return { command: "powershell.exe", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ntn, ...args] };
+		const entrypoint = resolveWindowsNtnNodeEntrypoint();
+		if (entrypoint) {
+			return { command: process.execPath, args: [entrypoint, ...args] };
 		}
+		const ntn = resolveWindowsNtnCommand();
 		if (ntn?.toLowerCase().endsWith(".cmd")) {
 			return { command: "cmd.exe", args: ["/d", "/s", "/c", ntn, ...args] };
+		}
+		if (ntn?.toLowerCase().endsWith(".ps1")) {
+			return { command: "powershell.exe", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ntn, ...args] };
 		}
 		if (ntn) return { command: ntn, args };
 	}
 	return { command: spawnCommand(command), args };
+}
+
+function resolveWindowsNtnNodeEntrypoint() {
+	for (const dir of windowsNtnBaseDirs()) {
+		const packageDir = path.join(dir, "node_modules", "ntn");
+		const fromPackage = resolvePackageBin(packageDir, "ntn");
+		if (fromPackage) return fromPackage;
+		for (const relativePath of [
+			"dist/index.js",
+			"dist/cli.js",
+			"bin/ntn.js",
+			"bin/cli.js",
+			"cli.js",
+			"index.js",
+		]) {
+			const candidate = path.join(packageDir, relativePath);
+			if (existsSync(candidate)) return candidate;
+		}
+	}
+	return null;
+}
+
+function windowsNtnBaseDirs() {
+	const dirs = new Set();
+	const hinted = process.env.NOTION_TILLER_NTN_COMMAND;
+	if (hinted && existsSync(hinted)) dirs.add(path.dirname(hinted));
+	const fromPath = findOnWindowsPath(["ntn.cmd", "ntn.ps1", "ntn.exe"]);
+	if (fromPath) dirs.add(path.dirname(fromPath));
+	if (process.env.APPDATA) dirs.add(path.join(process.env.APPDATA, "npm"));
+	if (process.env.npm_config_prefix) dirs.add(process.env.npm_config_prefix);
+	return [...dirs].filter(Boolean);
+}
+
+function resolvePackageBin(packageDir, binName) {
+	const packagePath = path.join(packageDir, "package.json");
+	if (!existsSync(packagePath)) return null;
+	try {
+		const parsed = JSON.parse(readFileSync(packagePath, "utf8"));
+		const bin = typeof parsed.bin === "string" ? parsed.bin : parsed.bin?.[binName] ?? Object.values(parsed.bin ?? {})[0];
+		if (!bin || typeof bin !== "string") return null;
+		const candidate = path.resolve(packageDir, bin);
+		return existsSync(candidate) ? candidate : null;
+	} catch {
+		return null;
+	}
 }
 
 function resolveWindowsNtnCommand() {
