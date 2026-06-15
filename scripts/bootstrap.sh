@@ -77,11 +77,11 @@ resolve_node_requirement() {
 		echo "You can install Node.js from:"
 		echo "  https://nodejs.org"
 		echo
-		read -r -p "Or install Node.js 22 now with Homebrew? [y/N] " answer
+		read -r -p "Or install Node.js now with Homebrew? [y/N] " answer
 		if [[ "$answer" =~ ^([yY]|[yY][eE][sS])$ ]]; then
 			echo
-			echo "Installing Node.js 22 with Homebrew..."
-			if brew install node@22; then
+			echo "Installing Node.js with Homebrew..."
+			if brew install node; then
 				echo
 				echo "Node.js install finished."
 				action_needed "Do NOT run ntn login poll yet."

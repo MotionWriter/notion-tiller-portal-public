@@ -42,6 +42,8 @@ const color = {
 	yellow: (value) => useColor ? `\x1b[33m${value}\x1b[39m` : value,
 };
 
+ensureUnixLocalBinPath();
+
 main().catch((error) => {
 	console.error(`\nInstall failed: ${error.message}`);
 	process.exit(1);
@@ -617,7 +619,7 @@ async function ensureTillerAuth(workersConfig) {
 		console.log(`\nTiller login failed: ${reason}`);
 		const rl = createPrompt();
 		if (isTlsCertificateError(reason)) {
-			printInfo("This looks like a Windows/Node certificate trust issue, not a bad Tiller password.");
+			printInfo("This looks like a local Node certificate trust issue, not a bad Tiller password.");
 			printInfo("The Worker can enable Tiller-only TLS compatibility for https://tiller.work.");
 			const allowTls = await askActionYesNoDefault(rl, "Enable Tiller TLS compatibility mode? [Y/n] ", true);
 			rl.close();
@@ -935,6 +937,15 @@ function runWithSpinner(command, args, options = {}) {
 
 function spawnCommand(command) {
 	return isWindows && windowsShimCommands.has(command) ? `${command}.cmd` : command;
+}
+
+function ensureUnixLocalBinPath() {
+	if (isWindows) return;
+	const localBin = path.join(os.homedir(), ".local", "bin");
+	const segments = (process.env.PATH ?? "").split(":");
+	if (!segments.includes(localBin)) {
+		process.env.PATH = `${localBin}${process.env.PATH ? `:${process.env.PATH}` : ""}`;
+	}
 }
 
 function spawnSpec(command, args) {
