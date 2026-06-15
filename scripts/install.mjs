@@ -769,7 +769,8 @@ function assertWorkerPackage() {
 }
 
 function checkCommand(command, args, message) {
-	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
+	const spec = spawnSpec(command, args);
+	const result = spawnSync(spec.command, spec.args, { encoding: "utf8" });
 	if (result.status !== 0) throw new Error(message ?? `${command} check failed.`);
 	console.log(`${command}: ${result.stdout.trim() || "ok"}`);
 }
@@ -791,7 +792,8 @@ function unsetWorkerEnv(workersConfig, name) {
 }
 
 function checkVersion(command, args, minimumMajor, message) {
-	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
+	const spec = spawnSpec(command, args);
+	const result = spawnSync(spec.command, spec.args, { encoding: "utf8" });
 	if (result.status !== 0) throw new Error(message);
 	const raw = result.stdout.trim();
 	const major = Number((raw.match(/\d+/) ?? [])[0]);
@@ -800,14 +802,16 @@ function checkVersion(command, args, minimumMajor, message) {
 }
 
 function checkDoctorCommand(command, args, issue, issues) {
-	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
+	const spec = spawnSpec(command, args);
+	const result = spawnSync(spec.command, spec.args, { encoding: "utf8" });
 	const ok = result.status === 0;
 	printCheck(command, ok, ok ? result.stdout.trim() || "ok" : issue);
 	if (!ok) issues.push(issue);
 }
 
 function checkDoctorVersion(command, args, minimumMajor, issue, issues) {
-	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
+	const spec = spawnSpec(command, args);
+	const result = spawnSync(spec.command, spec.args, { encoding: "utf8" });
 	const raw = result.stdout.trim();
 	const major = Number((raw.match(/\d+/) ?? [])[0]);
 	const ok = result.status === 0 && Number.isFinite(major) && major >= minimumMajor;
@@ -837,7 +841,8 @@ function ensureNotionLogin() {
 }
 
 function run(command, args, options = {}) {
-	const result = spawnSync(spawnCommand(command), args, {
+	const spec = spawnSpec(command, args);
+	const result = spawnSync(spec.command, spec.args, {
 		cwd: options.cwd,
 		encoding: "utf8",
 		stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
@@ -867,7 +872,8 @@ function runWithSpinner(command, args, options = {}) {
 	}
 
 	return new Promise((resolve, reject) => {
-		const child = spawn(spawnCommand(command), args, {
+		const spec = spawnSpec(command, args);
+		const child = spawn(spec.command, spec.args, {
 			cwd: options.cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -902,6 +908,13 @@ function runWithSpinner(command, args, options = {}) {
 
 function spawnCommand(command) {
 	return isWindows && windowsShimCommands.has(command) ? `${command}.cmd` : command;
+}
+
+function spawnSpec(command, args) {
+	if (command === "npm" && process.env.npm_execpath) {
+		return { command: process.execPath, args: [process.env.npm_execpath, ...args] };
+	}
+	return { command: spawnCommand(command), args };
 }
 
 function createPrompt() {
