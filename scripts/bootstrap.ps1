@@ -72,6 +72,28 @@ function Invoke-Ntn($CommandArgs) {
 	& $ntn @CommandArgs
 }
 
+function Invoke-NativeQuiet($Command, [string[]]$CommandArgs) {
+	$oldErrorActionPreference = $ErrorActionPreference
+	$ErrorActionPreference = "Continue"
+	try {
+		& $Command @CommandArgs 1>$null 2>$null
+		return $LASTEXITCODE
+	} catch {
+		return 1
+	} finally {
+		$ErrorActionPreference = $oldErrorActionPreference
+	}
+}
+
+function Test-NtnAuth {
+	$ntn = Get-NtnCommand
+	if (-not $ntn) {
+		return $false
+	}
+	$status = Invoke-NativeQuiet -Command $ntn -CommandArgs @("api", "v1/users/me")
+	return $status -eq 0
+}
+
 function Get-MajorVersion($Command, $CommandArgs) {
 	$output = & $Command @CommandArgs 2>$null
 	if ($LASTEXITCODE -ne 0 -or -not $output) {
@@ -172,8 +194,7 @@ if (-not $ntnCommand) {
 Write-Host "ntn: $(& $ntnCommand --version)"
 
 Write-Step "Checking Notion CLI login..."
-Invoke-Ntn -CommandArgs @("api", "v1/users/me") *> $null
-if ($LASTEXITCODE -ne 0) {
+if (-not (Test-NtnAuth)) {
 	Invoke-Ntn -CommandArgs @("login")
 	Write-ActionNeeded "Only now should you run ntn login poll."
 	Write-Host "After confirming the browser code, run:"
