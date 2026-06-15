@@ -47,13 +47,13 @@ Windows:
 ntn.cmd login poll
 ```
 
-Then rerun bootstrap or run:
+Then rerun bootstrap. Advanced users can run this manually. Use `npm` on macOS/Linux and `npm.cmd` on Windows PowerShell:
 
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal install
 ```
 
-Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux can use the Notion install script.
+Notion CLI install note: Windows uses `npm.cmd install --global ntn`; macOS/Linux can use the Notion install script.
 
 ## First Run Checklist
 

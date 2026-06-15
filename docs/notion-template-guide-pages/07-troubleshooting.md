@@ -18,6 +18,8 @@
 
 ## Auth Fixes
 
+Use `npm` on macOS/Linux. Use `npm.cmd` on Windows PowerShell.
+
 Tiller auth failed:
 
 ```shell

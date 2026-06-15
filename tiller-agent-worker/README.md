@@ -53,7 +53,7 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 After deploy:
 
 ```sh
-ntn workers webhooks list --workers-config-file "$HOME/.notion-tiller-portal/worker/workers.json"
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal webhooks
 ```
 
 Use these in Notion automations:

@@ -19,6 +19,8 @@ Secrets stay in Worker env. Do not paste passwords or API secrets into Notion da
 
 ## Commands
 
+Use `npm` on macOS/Linux. Use `npm.cmd` on Windows PowerShell.
+
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal credentials
 ```

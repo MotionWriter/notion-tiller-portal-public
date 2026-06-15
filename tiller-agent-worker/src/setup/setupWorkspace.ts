@@ -51,9 +51,10 @@ type StarterViewSpec = {
 };
 
 const NOTION_VIEWS_API_VERSION = "2026-03-11";
-const CLI_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
-const WEBHOOKS_COMMAND_MAC_LINUX = `ntn workers webhooks list --workers-config-file "$HOME/.notion-tiller-portal/worker/workers.json"`;
-const WEBHOOKS_COMMAND_WINDOWS = `ntn.cmd workers webhooks list --workers-config-file "$env:USERPROFILE\\.notion-tiller-portal\\worker\\workers.json"`;
+const CLI_COMMAND_MAC_LINUX = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
+const CLI_COMMAND_WINDOWS = "npm.cmd exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
+const WEBHOOKS_COMMAND_MAC_LINUX = `${CLI_COMMAND_MAC_LINUX} webhooks`;
+const WEBHOOKS_COMMAND_WINDOWS = `${CLI_COMMAND_WINDOWS} webhooks`;
 
 const STARTER_VIEWS: StarterViewSpec[] = [
 	{
@@ -760,9 +761,9 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			paragraphBlock("Finished files appear in Render Outputs and link back to the Campaign, Work Order, and Template."),
 			headingBlock("Fix credentials"),
 			paragraphBlock("If Tiller login fails, run this in Terminal:"),
-			codeBlock(`${CLI_COMMAND} credentials`),
+			...cliCommandBlocks("credentials"),
 			paragraphBlock("If Google Drive asset links or output uploads fail, run this in Terminal:"),
-			codeBlock(`${CLI_COMMAND} google-drive`),
+			...cliCommandBlocks("google-drive"),
 			headingBlock("Google Drive credentials"),
 			paragraphBlock("Use Google Drive only when asset folders are too large for Notion uploads or when finished outputs should go to Drive."),
 			paragraphBlock("Create or restrict API keys: https://console.cloud.google.com/apis/credentials"),
@@ -785,7 +786,7 @@ Scopes needed:
 Do not ask me to paste secrets into Notion. These values will be saved through the CLI command notion-tiller-portal google-drive.
 Walk me step by step through Google Cloud Console and OAuth Playground.`),
 			paragraphBlock("To review set/missing Worker secrets or delete old values, run this in Terminal:"),
-			codeBlock(`${CLI_COMMAND} secrets`),
+			...cliCommandBlocks("secrets"),
 		],
 	});
 }
@@ -840,9 +841,9 @@ async function appendSetupInstructions(
 				headingBlock("Worker setup"),
 				paragraphBlock("Tiller and Notion secrets are stored on the Worker. Do not store passwords in Notion database fields."),
 				paragraphBlock("To update Tiller login or other credentials later, run this in Terminal:"),
-				codeBlock(`${CLI_COMMAND} credentials`),
+				...cliCommandBlocks("credentials"),
 				paragraphBlock("To update Google Drive public folder links, private folders, or output uploads, run this in Terminal:"),
-				codeBlock(`${CLI_COMMAND} google-drive`),
+				...cliCommandBlocks("google-drive"),
 				paragraphBlock("Google links: create keys at https://console.cloud.google.com/apis/credentials, enable Drive API at https://console.cloud.google.com/apis/library/drive.googleapis.com, check scopes at https://developers.google.com/workspace/drive/api/guides/api-specific-auth, and use OAuth Playground at https://developers.google.com/oauthplayground when creating refresh tokens."),
 				paragraphBlock("For public Drive folders use GOOGLE_DRIVE_API_KEY. For private folder reads use scope https://www.googleapis.com/auth/drive.readonly. For Drive output uploads use scope https://www.googleapis.com/auth/drive.file."),
 				paragraphBlock("AI helper prompt:"),
@@ -858,9 +859,9 @@ Scopes needed:
 Do not ask me to paste secrets into Notion. These values will be saved through the CLI command notion-tiller-portal google-drive.
 Walk me step by step through Google Cloud Console and OAuth Playground.`),
 				paragraphBlock("To see which Worker secrets are set or delete old values, run this in Terminal:"),
-				codeBlock(`${CLI_COMMAND} secrets`),
+				...cliCommandBlocks("secrets"),
 				paragraphBlock("To check the install, run this in Terminal:"),
-				codeBlock(`${CLI_COMMAND} doctor`),
+				...cliCommandBlocks("doctor"),
 			],
 		});
 	}
@@ -937,6 +938,15 @@ function webhookUrlBlocks(label: string, help: string, url?: string) {
 		paragraphBlock(label),
 		paragraphBlock(help),
 		codeBlock(url),
+	];
+}
+
+function cliCommandBlocks(command: string) {
+	return [
+		paragraphBlock("macOS/Linux:"),
+		codeBlock(`${CLI_COMMAND_MAC_LINUX} ${command}`),
+		paragraphBlock("Windows PowerShell:"),
+		codeBlock(`${CLI_COMMAND_WINDOWS} ${command}`),
 	];
 }
 

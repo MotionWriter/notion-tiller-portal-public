@@ -30,6 +30,8 @@ Do not paste Google secrets into Notion database fields.
 
 After credentials are created, save them to the Notion Worker from Terminal:
 
+Use `npm` on macOS/Linux. Use `npm.cmd` on Windows PowerShell.
+
 ```shell
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal google-drive
 ```

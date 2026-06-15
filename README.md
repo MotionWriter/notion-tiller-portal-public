@@ -22,7 +22,7 @@ The bootstrap checks Node/npm/Git, installs the Notion CLI if needed, checks Not
 
 If Notion login pauses the flow, open the printed browser URL, confirm the code, run the exact `login poll` command bootstrap prints, then rerun the bootstrap command for your computer.
 
-Notion CLI install note: Windows uses `npm install --global ntn`; macOS/Linux can use the Notion install script.
+Notion CLI install note: Windows uses `npm.cmd install --global ntn`; macOS/Linux can use the Notion install script.
 
 ## What Users Need
 
@@ -51,6 +51,8 @@ Create the Notion token at [Notion internal integrations](https://www.notion.so/
 The database prefix controls names like `Tiller Campaigns`; use a client or studio name if you do not want everything named `Tiller`.
 
 ## Manual Commands
+
+Use `npm` on macOS/Linux and `npm.cmd` on Windows PowerShell.
 
 Onboarding:
 
@@ -86,6 +88,12 @@ Review or delete stored Worker secrets:
 
 ```sh
 npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal secrets
+```
+
+List webhook URLs:
+
+```sh
+npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal webhooks
 ```
 
 ## Google Drive Assets

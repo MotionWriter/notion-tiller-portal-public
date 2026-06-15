@@ -166,6 +166,8 @@ No custom JSON is needed. Notion sends the page event. The Worker reads the page
 
 ## Step 7: Run Doctor
 
+Use `npm` on macOS/Linux. Use `npm.cmd` on Windows PowerShell.
+
 Run:
 
 ```sh

@@ -26,9 +26,9 @@ const command = process.argv[2] ?? "install";
 const notionIntegrationUrl = "https://www.notion.so/profile/integrations/internal";
 const defaultPortalName = "Tiller Portal";
 const defaultDatabasePrefix = "Tiller";
-const cliCommand = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
 const isWindows = process.platform === "win32";
-const windowsShimCommands = new Set(["npm", "npx", "ntn"]);
+const cliCommand = `${isWindows ? "npm.cmd" : "npm"} exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal`;
+const windowsShimCommands = new Set(["npm", "npx"]);
 const windowsBootstrapCommand = "irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex";
 const unixBootstrapCommand = "curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash";
 const windowsNtnInstallCommand = "npm.cmd install --global ntn";
@@ -68,8 +68,12 @@ async function main() {
 		await runOnboarding();
 		return;
 	}
+	if (command === "webhooks") {
+		runWebhooks();
+		return;
+	}
 	if (command !== "install") {
-		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", "google-drive", "secrets", or "onboarding".`);
+		throw new Error(`Unknown command "${command}". Use "install", "doctor", "credentials", "google-drive", "secrets", "webhooks", or "onboarding".`);
 	}
 
 	console.log(color.bold("Notion Tiller Portal installer"));
@@ -754,6 +758,14 @@ function runDoctor() {
 	for (const issue of [...new Set(issues)]) console.log(`- ${issue}`);
 }
 
+function runWebhooks() {
+	const workersConfig = path.join(workerDir, "workers.json");
+	if (!existsSync(workersConfig)) {
+		throw new Error(`workers.json not found at ${workersConfig}. Run installer first.`);
+	}
+	run("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], { cwd: workerDir });
+}
+
 function prepareWorkerDir() {
 	if (!existsSync(path.join(sourceWorkerDir, "package.json"))) {
 		throw new Error(`Worker source not found at ${sourceWorkerDir}. Reinstall package and try again.`);
@@ -934,14 +946,7 @@ function spawnSpec(command, args) {
 		if (entrypoint) {
 			return { command: process.execPath, args: [entrypoint, ...args] };
 		}
-		const ntn = resolveWindowsNtnCommand();
-		if (ntn?.toLowerCase().endsWith(".cmd")) {
-			return { command: "cmd.exe", args: ["/d", "/s", "/c", ntn, ...args] };
-		}
-		if (ntn?.toLowerCase().endsWith(".ps1")) {
-			return { command: "powershell.exe", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ntn, ...args] };
-		}
-		if (ntn) return { command: ntn, args };
+		throw new Error(`Could not resolve the Notion CLI Node entrypoint. Reinstall Notion CLI, then rerun bootstrap:\n${windowsNtnInstallCommand}`);
 	}
 	return { command: spawnCommand(command), args };
 }
@@ -989,24 +994,6 @@ function resolvePackageBin(packageDir, binName) {
 	} catch {
 		return null;
 	}
-}
-
-function resolveWindowsNtnCommand() {
-	const hinted = process.env.NOTION_TILLER_NTN_COMMAND;
-	const fromHint = resolveWindowsShimCandidate(hinted, "ntn");
-	if (fromHint) return fromHint;
-	return findOnWindowsPath(["ntn.ps1", "ntn.cmd", "ntn.exe"]);
-}
-
-function resolveWindowsShimCandidate(candidate, baseName) {
-	if (!candidate) return null;
-	if (!existsSync(candidate)) return null;
-	const ext = path.extname(candidate).toLowerCase();
-	if (ext === ".cmd") {
-		const ps1 = path.join(path.dirname(candidate), `${baseName}.ps1`);
-		if (existsSync(ps1)) return ps1;
-	}
-	return candidate;
 }
 
 function findOnWindowsPath(names) {
