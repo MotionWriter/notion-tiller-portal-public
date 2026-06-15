@@ -27,7 +27,7 @@ Ask them to have:
 - Terminal on macOS/Linux or PowerShell on Windows
 - Node.js 22+ if possible
 
-If Node is missing on Windows, the bootstrap asks whether to install Node.js 22 LTS with `winget`. If the user says no, or `winget` is not available, it prints the Node download page.
+If Node is missing, the bootstrap offers an in-terminal install path when possible: Homebrew on macOS, `winget` on Windows. If the user says no, or the package manager is not available, it prints the Node download page.
 
 ## Step 1: Create The Setup Page
 
@@ -74,8 +74,7 @@ What they should see:
 - Node/npm check
 - Notion CLI install if missing
 - Notion CLI login if needed
-- Short onboarding text
-- Prompt to start the installer
+- Guided installer prompts
 
 If Notion CLI login is needed, the bootstrap stops after printing a browser login URL.
 
@@ -83,9 +82,13 @@ Do this in order:
 
 - Open the URL printed in Terminal.
 - Confirm the browser code matches the Terminal code.
-- Run:
+- Run the command for their computer:
 
 ```sh
+"$HOME/.local/bin/ntn" login poll
+```
+
+```powershell
 ntn login poll
 ```
 
@@ -99,7 +102,7 @@ curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-p
 irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex
 ```
 
-If Node is missing on Windows, choose whether to let bootstrap install Node with `winget`. After Node installs, close and reopen PowerShell, then rerun bootstrap.
+If Node is missing, choose whether to let bootstrap install Node with Homebrew on macOS or `winget` on Windows. After Node installs, close and reopen Terminal or PowerShell, then rerun bootstrap.
 
 ## Step 4: Answer Installer Prompts
 
@@ -213,4 +216,4 @@ npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main --
 - `Workers enabled`: enable Workers in Notion workspace settings.
 - `Missing NOTION_API_TOKEN`: rerun installer and update the Notion token when asked.
 - `Tiller auth failed`: run `credentials` and update Tiller credentials.
-- Node missing or old: on Windows, let bootstrap install Node with `winget`, or install from the Node website, then rerun bootstrap.
+- Node missing or old: let bootstrap install Node with Homebrew on macOS or `winget` on Windows, or install from the Node website, then rerun bootstrap.

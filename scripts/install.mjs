@@ -28,6 +28,7 @@ const defaultPortalName = "Tiller Portal";
 const defaultDatabasePrefix = "Tiller";
 const cliCommand = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
 const isWindows = process.platform === "win32";
+const windowsShimCommands = new Set(["npm", "npx", "ntn"]);
 const windowsBootstrapCommand = "irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex";
 const unixBootstrapCommand = "curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash";
 const windowsNtnInstallCommand = "npm install --global ntn";
@@ -766,7 +767,7 @@ function assertWorkerPackage() {
 }
 
 function checkCommand(command, args, message) {
-	const result = spawnSync(command, args, { encoding: "utf8" });
+	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
 	if (result.status !== 0) throw new Error(message ?? `${command} check failed.`);
 	console.log(`${command}: ${result.stdout.trim() || "ok"}`);
 }
@@ -786,7 +787,7 @@ function unsetWorkerEnv(workersConfig, name) {
 }
 
 function checkVersion(command, args, minimumMajor, message) {
-	const result = spawnSync(command, args, { encoding: "utf8" });
+	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
 	if (result.status !== 0) throw new Error(message);
 	const raw = result.stdout.trim();
 	const major = Number((raw.match(/\d+/) ?? [])[0]);
@@ -795,14 +796,14 @@ function checkVersion(command, args, minimumMajor, message) {
 }
 
 function checkDoctorCommand(command, args, issue, issues) {
-	const result = spawnSync(command, args, { encoding: "utf8" });
+	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
 	const ok = result.status === 0;
 	printCheck(command, ok, ok ? result.stdout.trim() || "ok" : issue);
 	if (!ok) issues.push(issue);
 }
 
 function checkDoctorVersion(command, args, minimumMajor, issue, issues) {
-	const result = spawnSync(command, args, { encoding: "utf8" });
+	const result = spawnSync(spawnCommand(command), args, { encoding: "utf8" });
 	const raw = result.stdout.trim();
 	const major = Number((raw.match(/\d+/) ?? [])[0]);
 	const ok = result.status === 0 && Number.isFinite(major) && major >= minimumMajor;
@@ -831,7 +832,7 @@ function ensureNotionLogin() {
 }
 
 function run(command, args, options = {}) {
-	const result = spawnSync(command, args, {
+	const result = spawnSync(spawnCommand(command), args, {
 		cwd: options.cwd,
 		encoding: "utf8",
 		stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
@@ -861,7 +862,7 @@ function runWithSpinner(command, args, options = {}) {
 	}
 
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, {
+		const child = spawn(spawnCommand(command), args, {
 			cwd: options.cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -892,6 +893,10 @@ function runWithSpinner(command, args, options = {}) {
 			resolve({ status, stdout, stderr });
 		});
 	});
+}
+
+function spawnCommand(command) {
+	return isWindows && windowsShimCommands.has(command) ? `${command}.cmd` : command;
 }
 
 function createPrompt() {

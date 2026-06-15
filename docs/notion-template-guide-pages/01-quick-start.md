@@ -30,9 +30,17 @@ macOS/Linux:
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
-If bootstrap pauses after Notion login, run:
+If bootstrap pauses after Notion login, run the command for your computer.
+
+macOS/Linux:
 
 ```shell
+"$HOME/.local/bin/ntn" login poll
+```
+
+Windows:
+
+```powershell
 ntn login poll
 ```
 

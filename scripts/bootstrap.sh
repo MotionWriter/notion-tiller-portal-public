@@ -29,34 +29,68 @@ node_major() {
 	node --version 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/'
 }
 
-if ! need_cmd node || ! need_cmd npm; then
-	echo "Node.js and npm are required."
-	echo "Install Node.js 22+ from https://nodejs.org, then rerun this command."
+npm_major() {
+	npm --version 2>/dev/null | sed -E 's/^([0-9]+).*/\1/'
+}
+
+manual_node_help() {
+	echo "Open this page to install Node.js 22+ LTS:"
+	echo "  https://nodejs.org"
 	echo
-	echo "Copy/paste option:"
-	if [[ "$(uname -s)" == "Darwin" ]]; then
-		echo "  brew install node@22"
-		echo "  export PATH=\"/opt/homebrew/opt/node@22/bin:\$PATH\""
+	echo "npm is included with Node.js."
+	echo
+	echo "After installing Node, close and reopen Terminal, then rerun:"
+	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
+}
+
+resolve_node_requirement() {
+	local reason="$1"
+	echo "$reason"
+	echo
+	echo "Node.js 22+ and npm are required to move forward."
+	echo
+
+	if [[ "$(uname -s)" == "Darwin" ]] && need_cmd brew; then
+		echo "You can install Node.js from:"
+		echo "  https://nodejs.org"
+		echo
+		read -r -p "Or install Node.js 22 now with Homebrew? [y/N] " answer
+		if [[ "$answer" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+			echo
+			echo "Installing Node.js 22 with Homebrew..."
+			if brew install node@22; then
+				echo
+				echo "Node.js install finished."
+				echo "Close and reopen Terminal, then rerun:"
+				echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
+				return
+			fi
+			echo
+			echo "Homebrew install did not complete successfully."
+		fi
+	elif [[ "$(uname -s)" == "Darwin" ]]; then
+		echo "Homebrew was not found on this Mac."
 	else
-		echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
-		echo "  sudo apt-get install -y nodejs"
+		echo "Automatic Node install is not enabled for this OS."
 	fi
+
+	manual_node_help
+}
+
+if ! need_cmd node || ! need_cmd npm; then
+	resolve_node_requirement "Node.js or npm was not found."
 	exit 1
 fi
 
 NODE_MAJOR="$(node_major)"
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 22 ]; then
-	echo "Node.js 22+ is required. Found: $(node --version)"
-	echo "Update Node.js from https://nodejs.org, then rerun this command."
-	echo
-	echo "Copy/paste option:"
-	if [[ "$(uname -s)" == "Darwin" ]]; then
-		echo "  brew install node@22"
-		echo "  export PATH=\"/opt/homebrew/opt/node@22/bin:\$PATH\""
-	else
-		echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
-		echo "  sudo apt-get install -y nodejs"
-	fi
+	resolve_node_requirement "Node.js 22+ is required. Found: $(node --version)"
+	exit 1
+fi
+
+NPM_MAJOR="$(npm_major)"
+if [ -z "$NPM_MAJOR" ] || [ "$NPM_MAJOR" -lt 10 ]; then
+	resolve_node_requirement "npm 10+ is required. Found: $(npm --version)"
 	exit 1
 fi
 
@@ -73,15 +107,27 @@ if ! need_cmd ntn; then
 	export PATH="$NTN_INSTALL_DIR:$PATH"
 fi
 
-echo "ntn: $(ntn --version)"
+NTN_CMD="$(command -v ntn || true)"
+if [ -z "$NTN_CMD" ] && [ -x "$NTN_INSTALL_DIR/ntn" ]; then
+	NTN_CMD="$NTN_INSTALL_DIR/ntn"
+fi
+
+if [ -z "$NTN_CMD" ]; then
+	echo "Notion CLI installed, but ntn is not available in this Terminal session."
+	echo "Close and reopen Terminal, then rerun:"
+	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
+	exit 1
+fi
+
+echo "ntn: $("$NTN_CMD" --version)"
 
 echo
 echo "Checking Notion CLI login..."
-if ! ntn api v1/users/me >/dev/null 2>&1; then
-	ntn login || true
+if ! "$NTN_CMD" api v1/users/me >/dev/null 2>&1; then
+	"$NTN_CMD" login || true
 	echo
 	echo "After confirming in the browser, run:"
-	echo "  ntn login poll"
+	echo "  \"$NTN_CMD\" login poll"
 	echo
 	echo "Then rerun this bootstrap command:"
 	echo "  curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash"
