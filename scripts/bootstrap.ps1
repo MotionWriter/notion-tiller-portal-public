@@ -111,7 +111,7 @@ function Write-NodeManualInstallHelp {
 	Write-Host "  https://nodejs.org"
 	Write-Host ""
 	Write-Host "npm is included with Node.js."
-	Write-ActionNeeded "After Node installs, do NOT run ntn login poll yet."
+	Write-ActionNeeded "After Node installs, do NOT run a login poll command yet."
 	Write-Host "Close and reopen PowerShell, then rerun this bootstrap command:"
 	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
 }
@@ -133,7 +133,7 @@ function Resolve-NodeRequirement($Reason) {
 			if ($LASTEXITCODE -eq 0) {
 				Write-Host ""
 				Write-Host "Node.js install finished."
-				Write-ActionNeeded "Do NOT run ntn login poll yet."
+				Write-ActionNeeded "Do NOT run a login poll command yet."
 				Write-Host "Close and reopen PowerShell, then rerun this bootstrap command:"
 				Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
 				return
@@ -196,9 +196,9 @@ Write-Host "ntn: $(& $ntnCommand --version)"
 Write-Step "Checking Notion CLI login..."
 if (-not (Test-NtnAuth)) {
 	Invoke-Ntn -CommandArgs @("login")
-	Write-ActionNeeded "Only now should you run ntn login poll."
+	Write-ActionNeeded "Only now should you run ntn.cmd login poll."
 	Write-Host "After confirming the browser code, run:"
-	Write-Host "  ntn login poll"
+	Write-Host "  ntn.cmd login poll"
 	Write-Host ""
 	Write-Host "Then rerun this bootstrap command:"
 	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"

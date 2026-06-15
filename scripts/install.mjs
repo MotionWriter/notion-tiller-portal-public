@@ -773,16 +773,18 @@ function checkCommand(command, args, message) {
 }
 
 function setWorkerEnv(workersConfig, name, value) {
+	const ntnLabel = isWindows ? "ntn.cmd" : "ntn";
 	run("ntn", ["workers", "env", "set", `${name}=${value}`, "--workers-config-file", workersConfig], {
 		cwd: workerDir,
-		label: `ntn workers env set ${name}=<redacted> --workers-config-file ${workersConfig}`,
+		label: `${ntnLabel} workers env set ${name}=<redacted> --workers-config-file ${workersConfig}`,
 	});
 }
 
 function unsetWorkerEnv(workersConfig, name) {
+	const ntnLabel = isWindows ? "ntn.cmd" : "ntn";
 	run("ntn", ["workers", "env", "unset", name, "--workers-config-file", workersConfig], {
 		cwd: workerDir,
-		label: `ntn workers env unset ${name} --workers-config-file ${workersConfig}`,
+		label: `${ntnLabel} workers env unset ${name} --workers-config-file ${workersConfig}`,
 	});
 }
 
@@ -826,7 +828,8 @@ function ensureNotionLogin() {
 	run("ntn", ["login"]);
 	const verified = run("ntn", ["api", "v1/users/me"], { capture: true, allowFail: true, quiet: true });
 	if (verified.status !== 0) {
-		throw new Error("Notion CLI login did not complete. After confirming in the browser, run `ntn login poll`, then rerun the installer.");
+		const pollCommand = isWindows ? "ntn.cmd login poll" : "ntn login poll";
+		throw new Error(`Notion CLI login did not complete. After confirming in the browser, run \`${pollCommand}\`, then rerun the installer.`);
 	}
 	console.log("ntn auth: ok");
 }

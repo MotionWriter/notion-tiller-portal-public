@@ -30,7 +30,7 @@ macOS/Linux:
 curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash
 ```
 
-If bootstrap just installed Node, stop there. Close and reopen Terminal or PowerShell, then rerun bootstrap. Do not run `ntn login poll` yet.
+If bootstrap just installed Node, stop there. Close and reopen Terminal or PowerShell, then rerun bootstrap. Do not run a login poll command yet.
 
 If bootstrap pauses after Notion login, run the command for your computer.
 
@@ -43,7 +43,7 @@ macOS/Linux:
 Windows:
 
 ```powershell
-ntn login poll
+ntn.cmd login poll
 ```
 
 Then rerun bootstrap or run:

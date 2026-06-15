@@ -53,7 +53,7 @@ type StarterViewSpec = {
 const NOTION_VIEWS_API_VERSION = "2026-03-11";
 const CLI_COMMAND = "npm exec --yes --package=github:MotionWriter/notion-tiller-portal-public#main -- notion-tiller-portal";
 const WEBHOOKS_COMMAND_MAC_LINUX = `ntn workers webhooks list --workers-config-file "$HOME/.notion-tiller-portal/worker/workers.json"`;
-const WEBHOOKS_COMMAND_WINDOWS = `ntn workers webhooks list --workers-config-file "$env:USERPROFILE\\.notion-tiller-portal\\worker\\workers.json"`;
+const WEBHOOKS_COMMAND_WINDOWS = `ntn.cmd workers webhooks list --workers-config-file "$env:USERPROFILE\\.notion-tiller-portal\\worker\\workers.json"`;
 
 const STARTER_VIEWS: StarterViewSpec[] = [
 	{

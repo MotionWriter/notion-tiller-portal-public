@@ -78,7 +78,7 @@ What they should see:
 
 If Notion CLI login is needed, the bootstrap stops after printing a browser login URL.
 
-Important: Node install and Notion login are separate stops. If bootstrap just installed Node, do not run `ntn login poll`. Close and reopen Terminal or PowerShell, then rerun bootstrap.
+Important: Node install and Notion login are separate stops. If bootstrap just installed Node, do not run a login poll command. Close and reopen Terminal or PowerShell, then rerun bootstrap.
 
 Do this in order:
 
@@ -91,7 +91,7 @@ Do this in order:
 ```
 
 ```powershell
-ntn login poll
+ntn.cmd login poll
 ```
 
 - Rerun bootstrap for their computer:
