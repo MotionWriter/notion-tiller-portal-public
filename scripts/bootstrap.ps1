@@ -17,8 +17,32 @@ function Test-Command($Name) {
 	$null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Get-NpmCommand {
+	$cmd = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
+	if ($cmd) {
+		return $cmd.Source
+	}
+	$cmd = Get-Command "npm" -ErrorAction SilentlyContinue
+	if ($cmd) {
+		return $cmd.Source
+	}
+	return $null
+}
+
+function Invoke-Npm($CommandArgs) {
+	$npm = Get-NpmCommand
+	if (-not $npm) {
+		throw "npm command was not found on PATH."
+	}
+	& $npm @CommandArgs
+}
+
 function Add-NpmGlobalPath {
-	$prefix = npm prefix --global 2>$null
+	$npm = Get-NpmCommand
+	if (-not $npm) {
+		return
+	}
+	$prefix = & $npm prefix --global 2>$null
 	if ($LASTEXITCODE -ne 0 -or -not $prefix) {
 		return
 	}
@@ -108,7 +132,7 @@ Write-Host "This gets your terminal ready, then starts the guided installer."
 Write-Host "Daily render work happens in Notion after setup."
 Write-Host ""
 
-if (-not (Test-Command "node") -or -not (Test-Command "npm")) {
+if (-not (Test-Command "node") -or -not (Get-NpmCommand)) {
 	Resolve-NodeRequirement "Node.js or npm was not found."
 	exit 1
 }
@@ -119,20 +143,21 @@ if ($null -eq $nodeMajor -or $nodeMajor -lt 22) {
 	exit 1
 }
 
-$npmMajor = Get-MajorVersion "npm" @("--version")
+$npmCommand = Get-NpmCommand
+$npmMajor = Get-MajorVersion $npmCommand @("--version")
 if ($null -eq $npmMajor -or $npmMajor -lt 10) {
-	Resolve-NodeRequirement "npm 10+ is required. Found: $(npm --version)"
+	Resolve-NodeRequirement "npm 10+ is required. Found: $(& $npmCommand --version)"
 	exit 1
 }
 
 Write-Host "node: $(node --version)"
-Write-Host "npm: $(npm --version)"
+Write-Host "npm: $(& $npmCommand --version)"
 
 Add-NpmGlobalPath
 
 if (-not (Get-NtnCommand)) {
 	Write-Step "Installing Notion CLI with npm..."
-	npm install --global ntn
+	Invoke-Npm -CommandArgs @("install", "--global", "ntn")
 	Add-NpmGlobalPath
 }
 
@@ -160,4 +185,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-npm exec --yes "--package=$Package" -- notion-tiller-portal install
+Invoke-Npm -CommandArgs @("exec", "--yes", "--package=$Package", "--", "notion-tiller-portal", "install")
