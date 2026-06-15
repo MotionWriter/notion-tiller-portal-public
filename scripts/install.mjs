@@ -612,6 +612,17 @@ async function ensureTillerAuth(workersConfig) {
 		const reason = parsed?.error || parsed?.data?.error || parsed?.message || parsed?.data?.message || lastNonEmptyLine(result.stderr) || lastNonEmptyLine(result.stdout) || "Unknown Tiller auth error.";
 		console.log(`\nTiller login failed: ${reason}`);
 		const rl = createPrompt();
+		if (isTlsCertificateError(reason)) {
+			printInfo("This looks like a Windows/Node certificate trust issue, not a bad Tiller password.");
+			printInfo("The Worker can enable Tiller-only TLS compatibility for https://tiller.work.");
+			const allowTls = await askActionYesNoDefault(rl, "Enable Tiller TLS compatibility mode? [Y/n] ", true);
+			rl.close();
+			if (!allowTls) {
+				throw new Error(`Tiller login failed because the TLS certificate was not trusted. Run this later if you want to retry:\n${cliCommand} credentials`);
+			}
+			setWorkerEnv(workersConfig, "TILLER_ALLOW_INSECURE_TLS", "true");
+			continue;
+		}
 		const retry = await askActionYesNoDefault(rl, "Update Tiller email/password now? [Y/n] ", true);
 		if (!retry) {
 			rl.close();
@@ -623,6 +634,10 @@ async function ensureTillerAuth(workersConfig) {
 		setWorkerEnv(workersConfig, "TILLER_EMAIL", email);
 		setWorkerEnv(workersConfig, "TILLER_PASSWORD", password);
 	}
+}
+
+function isTlsCertificateError(value) {
+	return /self[- ]signed certificate|certificate|unable to verify|UNABLE_TO_VERIFY|SELF_SIGNED_CERT/i.test(String(value ?? ""));
 }
 
 async function runOnboarding() {
