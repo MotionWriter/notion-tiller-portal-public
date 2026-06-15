@@ -31,7 +31,7 @@ const isWindows = process.platform === "win32";
 const windowsShimCommands = new Set(["npm", "npx", "ntn"]);
 const windowsBootstrapCommand = "irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex";
 const unixBootstrapCommand = "curl -fsSL https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.sh | bash";
-const windowsNtnInstallCommand = "npm install --global ntn";
+const windowsNtnInstallCommand = "npm.cmd install --global ntn";
 const unixNtnInstallCommand = "curl -fsSL https://ntn.dev | NTN_INSTALL_DIR=\"$HOME/.local/bin\" bash";
 const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
 const color = {
@@ -914,7 +914,48 @@ function spawnSpec(command, args) {
 	if (command === "npm" && process.env.npm_execpath) {
 		return { command: process.execPath, args: [process.env.npm_execpath, ...args] };
 	}
+	if (isWindows && command === "ntn") {
+		const ntn = resolveWindowsNtnCommand();
+		if (ntn?.toLowerCase().endsWith(".ps1")) {
+			return { command: "powershell.exe", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ntn, ...args] };
+		}
+		if (ntn?.toLowerCase().endsWith(".cmd")) {
+			return { command: "cmd.exe", args: ["/d", "/s", "/c", ntn, ...args] };
+		}
+		if (ntn) return { command: ntn, args };
+	}
 	return { command: spawnCommand(command), args };
+}
+
+function resolveWindowsNtnCommand() {
+	const hinted = process.env.NOTION_TILLER_NTN_COMMAND;
+	const fromHint = resolveWindowsShimCandidate(hinted, "ntn");
+	if (fromHint) return fromHint;
+	return findOnWindowsPath(["ntn.ps1", "ntn.cmd", "ntn.exe"]);
+}
+
+function resolveWindowsShimCandidate(candidate, baseName) {
+	if (!candidate) return null;
+	if (!existsSync(candidate)) return null;
+	const ext = path.extname(candidate).toLowerCase();
+	if (ext === ".cmd") {
+		const ps1 = path.join(path.dirname(candidate), `${baseName}.ps1`);
+		if (existsSync(ps1)) return ps1;
+	}
+	return candidate;
+}
+
+function findOnWindowsPath(names) {
+	const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === "path");
+	const pathValue = pathKey ? process.env[pathKey] : "";
+	for (const dir of pathValue.split(";")) {
+		if (!dir) continue;
+		for (const name of names) {
+			const candidate = path.join(dir, name);
+			if (existsSync(candidate)) return candidate;
+		}
+	}
+	return null;
 }
 
 function createPrompt() {

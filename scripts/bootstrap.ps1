@@ -254,6 +254,7 @@ if (-not $ntnCommand) {
 }
 
 Write-Host "ntn: $(& $ntnCommand --version)"
+$env:NOTION_TILLER_NTN_COMMAND = $ntnCommand
 
 Write-Step "Checking Notion CLI login..."
 if (-not (Test-NtnAuth)) {
