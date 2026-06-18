@@ -4,6 +4,7 @@
 
 - Start here
 - What credentials are needed
+- Output folders
 - Where these go
 - AI helper prompt
 
@@ -23,6 +24,19 @@
 | Public Google Drive folders | `GOOGLE_DRIVE_API_KEY` | None |
 | Private Google Drive folder reads | OAuth client ID, client secret, refresh token | `https://www.googleapis.com/auth/drive.readonly` |
 | Google Drive output uploads | OAuth client ID, client secret, refresh token | `https://www.googleapis.com/auth/drive.file` |
+
+## Output Folders
+
+Use Google Drive output folders when finished renders should be copied to Drive in addition to Notion Render Outputs.
+
+1. Create OAuth credentials and refresh token with scope `https://www.googleapis.com/auth/drive.file`.
+2. Save those credentials with the `google-drive` command below.
+3. Paste the target Google Drive folder URL into the Work Order field `Download Renders Here`.
+4. Submit the render or run `Download Results`.
+
+The Worker still attaches each finished file to Render Outputs in Notion. If Drive upload fails, the Render Output `Last Error` explains what to fix.
+
+Use `Template Assets URL` for input assets. Use `Download Renders Here` for output folders.
 
 ## Where These Go
 

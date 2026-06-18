@@ -759,6 +759,8 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			paragraphBlock("Set Campaign Action to Submit Render. The Worker validates rows, builds the CSV, saves it on the Campaign, creates the Tiller Work Order, uploads parameters, and watches for outputs."),
 			headingBlock("6. Review outputs"),
 			paragraphBlock("Finished files appear in Render Outputs and link back to the Campaign, Work Order, and Template."),
+			paragraphBlock("Optional: to also copy finished renders into Google Drive, run the google-drive command, add OAuth credentials with scope https://www.googleapis.com/auth/drive.file, then paste the target folder URL into the Work Order field Download Renders Here."),
+			paragraphBlock("If Google Drive output upload fails, Notion Render Outputs are still created and the Render Output Last Error explains what to fix."),
 			headingBlock("Fix credentials"),
 			paragraphBlock("If Tiller login fails, run this in Terminal:"),
 			...cliCommandBlocks("credentials"),
@@ -773,6 +775,7 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			paragraphBlock("Public Drive folders need GOOGLE_DRIVE_API_KEY and no OAuth scope."),
 			paragraphBlock("Private Drive folder reads need scope https://www.googleapis.com/auth/drive.readonly."),
 			paragraphBlock("Drive output uploads need scope https://www.googleapis.com/auth/drive.file."),
+			paragraphBlock("For output folders, paste the target Google Drive folder URL into the Work Order field Download Renders Here. Use Template Assets URL for input assets, not outputs."),
 			paragraphBlock("Copy this into an AI chat if you want step-by-step help:"),
 			codeBlock(`Help me create Google Drive API credentials for Notion Tiller Portal.
 Purpose: allow my Notion Worker to read asset folders from Google Drive and optionally upload finished render outputs to Google Drive.
@@ -846,6 +849,7 @@ async function appendSetupInstructions(
 				...cliCommandBlocks("google-drive"),
 				paragraphBlock("Google links: create keys at https://console.cloud.google.com/apis/credentials, enable Drive API at https://console.cloud.google.com/apis/library/drive.googleapis.com, check scopes at https://developers.google.com/workspace/drive/api/guides/api-specific-auth, and use OAuth Playground at https://developers.google.com/oauthplayground when creating refresh tokens."),
 				paragraphBlock("For public Drive folders use GOOGLE_DRIVE_API_KEY. For private folder reads use scope https://www.googleapis.com/auth/drive.readonly. For Drive output uploads use scope https://www.googleapis.com/auth/drive.file."),
+				paragraphBlock("To copy finished renders to Google Drive, paste the target folder URL into the Work Order field Download Renders Here. The files still attach to Notion Render Outputs; Drive upload is an extra copy."),
 				paragraphBlock("AI helper prompt:"),
 				codeBlock(`Help me create Google Drive API credentials for Notion Tiller Portal.
 Purpose: allow my Notion Worker to read asset folders from Google Drive and optionally upload finished render outputs to Google Drive.

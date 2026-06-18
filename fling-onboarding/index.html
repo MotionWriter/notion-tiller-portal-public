@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Tiller Custom Portal Guide</title>
+		<link rel="stylesheet" href="./styles.css">
+	</head>
+	<body class="is-locked">
+		<section class="login-gate" aria-label="Tiller login">
+			<div class="login-card">
+				<p class="section-kicker">Tiller Custom Portal</p>
+				<h1>Sign in with Tiller</h1>
+				<p>Use your Tiller email and password to unlock the setup guide. This page checks your login with Tiller and does not store your password.</p>
+				<form class="login-form" data-login-form>
+					<label>
+						Tiller email
+						<input name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+					</label>
+					<label>
+						Tiller password
+						<span class="password-control">
+							<input name="password" type="password" autocomplete="current-password" required placeholder="Password" data-password-input>
+							<button type="button" data-toggle-password aria-pressed="false">Show</button>
+						</span>
+					</label>
+					<button type="submit">Unlock setup guide</button>
+				</form>
+				<p class="login-message" data-login-message role="status" aria-live="polite"></p>
+			</div>
+		</section>
+
+		<div id="guide-root" aria-live="polite"></div>
+		<div class="toast" role="status" aria-live="polite" hidden>Copied</div>
+		<script src="./app.js"></script>
+	</body>
+</html>

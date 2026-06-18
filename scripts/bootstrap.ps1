@@ -259,13 +259,20 @@ $env:NOTION_TILLER_NTN_COMMAND = $ntnCommand
 Write-Step "Checking Notion CLI login..."
 if (-not (Test-NtnAuth)) {
 	Invoke-Ntn -CommandArgs @("login")
-	Write-ActionNeeded "Only now should you run ntn.cmd login poll."
-	Write-Host "After confirming the browser code, run:"
-	Write-Host "  ntn.cmd login poll"
-	Write-Host ""
-	Write-Host "Then rerun this bootstrap command:"
-	Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
-	exit 0
+	if (-not (Test-NtnAuth)) {
+		Write-ActionNeeded "Finish Notion login before continuing."
+		Write-Host "Approve the browser code first."
+		Write-Host ""
+		Read-Host "After approving the browser code, press Enter to continue"
+		Invoke-Ntn -CommandArgs @("login", "poll")
+		if (-not (Test-NtnAuth)) {
+			Write-ActionNeeded "Notion login is still incomplete."
+			Write-Host "Rerun this bootstrap command after login is complete:"
+			Write-Host "  irm https://raw.githubusercontent.com/MotionWriter/notion-tiller-portal-public/main/scripts/bootstrap.ps1 | iex"
+			exit 1
+		}
+	}
+	Write-Host "Notion login complete."
 }
 
 Write-Host ""

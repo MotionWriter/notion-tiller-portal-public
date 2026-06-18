@@ -8,3 +8,8 @@ tiller-agent-worker/dist/
 workers.json
 .env
 .notion-tiller-portal/
+public-export/
+fling-onboarding/
+web/
+planning/
+.agent-orchestration/

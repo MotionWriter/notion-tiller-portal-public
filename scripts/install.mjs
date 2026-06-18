@@ -150,9 +150,9 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	console.log(`Worker folder: ${workerDir}`);
 
 	const rl = createPrompt();
-	const parentPageId = state.parentPageId || await ask(rl, "Setup page URL or ID: ");
-	const portalName = state.portalName || defaultPortalName;
-	const databasePrefix = state.databasePrefix || defaultDatabasePrefix;
+	const parentPageId = await resolveResumeParentPageId(rl, state);
+	const portalName = state.portalName || await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
+	const databasePrefix = state.databasePrefix || await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
 	const updateToken = await askYesNoDefault(rl, "Update Notion internal integration token? [y/N] ", false);
 	if (updateToken) {
 		await printNotionTokenHelp();
@@ -163,6 +163,27 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 
 	await ensureTillerAuth(workersConfig);
 	await finishInstall({ parentPageId, workerId: state.workerId, workersConfig, portalName, databasePrefix });
+}
+
+async function resolveResumeParentPageId(rl, state) {
+	if (!state.parentPageId) return ask(rl, "Setup page URL or ID: ");
+
+	printSection("Resume", "Existing setup page");
+	printInfo(`Saved setup page: ${state.parentPageId}`);
+	printInfo(`Saved setup page URL: ${notionPageUrl(state.parentPageId)}`);
+	printInfo("Choose No if you want to build this portal under a different Notion page.");
+	const reuseSavedPage = await askActionYesNoDefault(rl, "Use saved setup page? [Y/n] ", true);
+	if (reuseSavedPage) return state.parentPageId;
+
+	return ask(rl, "New setup page URL or ID: ");
+}
+
+function notionPageUrl(pageIdOrUrl) {
+	const raw = String(pageIdOrUrl ?? "").trim();
+	if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+	const compact = raw.replace(/-/g, "");
+	if (/^[a-f0-9]{32}$/i.test(compact)) return `https://www.notion.so/${compact}`;
+	return raw;
 }
 
 async function finishInstall({ parentPageId, workerId, workersConfig, portalName, databasePrefix }) {

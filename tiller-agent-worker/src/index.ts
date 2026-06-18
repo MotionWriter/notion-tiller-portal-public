@@ -3109,10 +3109,16 @@ async function createRenderOutputRowsForWorkOrder({
 		? await findTemplatePageIdByTillerId(notion, summary.tillerTemplateId)
 		: "";
 	const outputRows = [];
+	const driveOutputTarget = summary.downloadRendersHere
+		? await tryResolveDriveOutputTarget(summary.downloadRendersHere)
+		: { target: null, error: "" };
 	for (const [index, result] of results.entries()) {
 		const encodedName = encodeURIComponent(result.name);
 		const signedUrl = await resolveWorkOrderResultLocation(client, summary.tillerWorkOrderId, encodedName);
 		const file = await fetchSignedResultFile(signedUrl, result.name, result.size);
+		const driveUpload = driveOutputTarget.target
+			? await tryUploadOutputFileToDrive(driveOutputTarget.target, file)
+			: { url: "", error: driveOutputTarget.error };
 		const upload = await uploadNotionFile(notion, file);
 		const outputPage = await upsertRenderOutputRow({
 			notion,
@@ -3124,6 +3130,7 @@ async function createRenderOutputRowsForWorkOrder({
 			index: index + 1,
 			file,
 			fileUploadId: upload.id,
+			driveUpload,
 		});
 		outputRows.push({
 			pageId: outputPage.id,
@@ -3131,6 +3138,8 @@ async function createRenderOutputRowsForWorkOrder({
 			outputFilename: result.name,
 			fileSizeBytes: file.bytes.byteLength,
 			contentType: file.contentType,
+			driveUrl: driveUpload.url,
+			driveError: driveUpload.error,
 		});
 	}
 	await syncParentRenderOutputRelations({
@@ -3197,6 +3206,7 @@ async function upsertRenderOutputRow({
 	index,
 	file,
 	fileUploadId,
+	driveUpload,
 }: {
 	notion: any;
 	workOrderPageId: string;
@@ -3207,6 +3217,7 @@ async function upsertRenderOutputRow({
 	index: number;
 	file: { name: string; bytes: ArrayBuffer; contentType?: string };
 	fileUploadId: string;
+	driveUpload: { url: string; error: string };
 }) {
 	const dataSourceId = await getDataSourceId(notion, "renderOutputs");
 	const existing = await findRenderOutputRow(notion, dataSourceId, workOrderPageId, result.name);
@@ -3223,7 +3234,7 @@ async function upsertRenderOutputRow({
 		"File Size Bytes": { number: file.bytes.byteLength },
 		"Content Type": richTextValue(file.contentType || "application/octet-stream"),
 		"Downloaded At": { date: { start: new Date().toISOString() } },
-		"Last Error": richTextValue(""),
+		"Last Error": richTextValue(driveUpload.error),
 	};
 	let outputPage;
 	if (existing) {
@@ -3661,6 +3672,48 @@ async function tryUploadWorkOrderResultsToDrive(
 		return {
 			uploads: [],
 			error: `Google Drive upload failed, so temporary Tiller download links were used instead. These links expire quickly; run Download Results again to refresh them. ${message}`,
+		};
+	}
+}
+
+async function tryResolveDriveOutputTarget(folderUrl: string) {
+	try {
+		const folderId = extractGoogleDriveFolderId(folderUrl);
+		if (!folderId) {
+			throw new Error("Download Renders Here is not a recognized Google Drive folder link.");
+		}
+		return {
+			target: {
+				folderId,
+				accessToken: await getGoogleDriveAccessToken(),
+			},
+			error: "",
+		};
+	} catch (error) {
+		const message = (error as Error)?.message ?? String(error);
+		return {
+			target: null,
+			error: `Notion output attached, but Google Drive upload was skipped. Run ${CLI_GOOGLE_DRIVE_COMMAND} and check Download Renders Here. ${message}`,
+		};
+	}
+}
+
+async function tryUploadOutputFileToDrive(
+	target: { folderId: string; accessToken: string },
+	file: { name: string; bytes: ArrayBuffer; contentType?: string },
+) {
+	try {
+		const driveFile = await uploadBinaryFileToDrive({
+			accessToken: target.accessToken,
+			folderId: target.folderId,
+			file,
+		});
+		return { url: driveFile.webViewLink, error: "" };
+	} catch (error) {
+		const message = (error as Error)?.message ?? String(error);
+		return {
+			url: "",
+			error: `Notion output attached, but Google Drive upload failed. Run ${CLI_GOOGLE_DRIVE_COMMAND} and check Download Renders Here. ${message}`,
 		};
 	}
 }

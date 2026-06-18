@@ -1,7 +1,7 @@
 {
   "name": "notion-tiller-portal",
   "version": "0.1.0",
-  "private": false,
+  "private": true,
   "type": "module",
   "bin": {
     "notion-tiller-portal": "scripts/install.mjs"
