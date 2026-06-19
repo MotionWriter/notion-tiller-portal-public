@@ -18,6 +18,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(realpathSync(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(__dirname, "..");
+const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+const portalVersion = packageJson.version ?? "unknown";
 const sourceWorkerDir = path.join(repoRoot, "tiller-agent-worker");
 const installRoot = path.join(os.homedir(), ".notion-tiller-portal");
 const workerDir = path.join(installRoot, "worker");
@@ -79,6 +81,8 @@ async function main() {
 	}
 
 	console.log(color.bold("Notion Tiller Portal installer"));
+	console.log(`portal version: ${portalVersion}`);
+	console.log(`package source: github:MotionWriter/notion-tiller-portal-public#main`);
 	console.log(color.dim("Daily render work happens in Notion. Terminal is only for setup.\n"));
 
 	checkVersion("node", ["--version"], 22, "Node 22 or newer is required.");
@@ -150,9 +154,19 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	console.log(`Worker folder: ${workerDir}`);
 
 	const rl = createPrompt();
-	const parentPageId = await resolveResumeParentPageId(rl, state);
-	const portalName = state.portalName || await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
-	const databasePrefix = state.databasePrefix || await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
+	const resumeTarget = await resolveResumeTarget(rl, state);
+	const parentPageId = resumeTarget.parentPageId;
+	let portalName = state.portalName;
+	let databasePrefix = state.databasePrefix;
+	if (!resumeTarget.reuseSavedPage) {
+		printSection("Resume", "New portal names");
+		portalName = await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
+		printInfo("Database prefix example: Acme creates Acme Campaigns, Acme Work Orders, etc.");
+		databasePrefix = await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
+	} else {
+		portalName ||= await askOptional(rl, `Portal page name [${defaultPortalName}]: `, defaultPortalName);
+		databasePrefix ||= await askOptional(rl, `Database name prefix [${defaultDatabasePrefix}]: `, defaultDatabasePrefix);
+	}
 	const updateToken = await askYesNoDefault(rl, "Update Notion internal integration token? [y/N] ", false);
 	if (updateToken) {
 		await printNotionTokenHelp();
@@ -165,17 +179,30 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	await finishInstall({ parentPageId, workerId: state.workerId, workersConfig, portalName, databasePrefix });
 }
 
-async function resolveResumeParentPageId(rl, state) {
-	if (!state.parentPageId) return ask(rl, "Setup page URL or ID: ");
+async function resolveResumeTarget(rl, state) {
+	if (!state.parentPageId) {
+		return {
+			parentPageId: await ask(rl, "Setup page URL or ID: "),
+			reuseSavedPage: false,
+		};
+	}
 
 	printSection("Resume", "Existing setup page");
 	printInfo(`Saved setup page: ${state.parentPageId}`);
 	printInfo(`Saved setup page URL: ${notionPageUrl(state.parentPageId)}`);
 	printInfo("Choose No if you want to build this portal under a different Notion page.");
 	const reuseSavedPage = await askActionYesNoDefault(rl, "Use saved setup page? [Y/n] ", true);
-	if (reuseSavedPage) return state.parentPageId;
+	if (reuseSavedPage) {
+		return {
+			parentPageId: state.parentPageId,
+			reuseSavedPage: true,
+		};
+	}
 
-	return ask(rl, "New setup page URL or ID: ");
+	return {
+		parentPageId: await ask(rl, "New setup page URL or ID: "),
+		reuseSavedPage: false,
+	};
 }
 
 function notionPageUrl(pageIdOrUrl) {
@@ -199,7 +226,7 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 	const setupJson = parseLastJson(setup.stdout);
 	const configDataSourceId = setupJson?.configDataSourceId;
 	if (!configDataSourceId) throw new Error("setupWorkspace did not return configDataSourceId.");
-	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
+	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "", settingsPageId: setupJson?.settingsPageId ?? "" });
 
 	setWorkerEnv(workersConfig, "TILLER_PORTAL_CONFIG_DATA_SOURCE_ID", configDataSourceId);
 
@@ -230,10 +257,13 @@ async function finishInstall({ parentPageId, workerId, workersConfig, portalName
 		"--workers-config-file",
 		workersConfig,
 	], { cwd: workerDir, allowFail: true, message: "Saving webhook URLs to Settings page" });
-	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "" });
+	writeState({ completedSteps: ["preflight", "build", "deploy", "worker-env", "setup", "config-env", "webhooks"], workerId, parentPageId, portalName, databasePrefix, configDataSourceId, portalPageId: setupJson?.portalPageId ?? "", settingsPageId: setupJson?.settingsPageId ?? "" });
 
 	printSection("Done", "Install complete");
-	console.log(`Portal page ID: ${setupJson?.portalPageId ?? "(created; see setup output)"}`);
+	const portalUrl = setupJson?.portalPageId ? notionPageUrl(setupJson.portalPageId) : "";
+	const settingsUrl = setupJson?.settingsPageId ? notionPageUrl(setupJson.settingsPageId) : "";
+	console.log(`Portal page: ${portalUrl || setupJson?.portalPageId || "(created; see setup output)"}`);
+	if (settingsUrl) console.log(`Settings page: ${settingsUrl}`);
 	console.log("\nWebhook URLs:");
 	printWebhookUrls(webhookUrls);
 	console.log("\nNext:");
@@ -252,6 +282,9 @@ function setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, w
 				templateAction: webhookUrls.templateAction ?? null,
 				workOrderAction: webhookUrls.workOrderAction ?? null,
 				campaignAction: webhookUrls.campaignAction ?? null,
+				portalAreaAction: webhookUrls.portalAreaAction ?? null,
+				credentialAction: webhookUrls.credentialAction ?? null,
+				controlAction: webhookUrls.controlAction ?? null,
 				cavalryWorkOrderStarted: webhookUrls.cavalryWorkOrderStarted ?? null,
 			}
 			: null,
@@ -261,7 +294,7 @@ function setupPayload({ parentPageId, portalName, databasePrefix, webhookUrls, w
 
 function parseWebhookUrls(value) {
 	const urls = {};
-	const names = ["templateAction", "workOrderAction", "campaignAction", "cavalryWorkOrderStarted"];
+	const names = ["templateAction", "workOrderAction", "campaignAction", "portalAreaAction", "credentialAction", "controlAction", "cavalryWorkOrderStarted"];
 	for (const name of names) {
 		const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 		const match = value.match(new RegExp(`(https://\\S+/${escaped})(?:\\s|$)`));
@@ -271,7 +304,7 @@ function parseWebhookUrls(value) {
 }
 
 function printWebhookUrls(webhookUrls) {
-	const names = ["templateAction", "workOrderAction", "campaignAction", "cavalryWorkOrderStarted"];
+	const names = ["templateAction", "workOrderAction", "campaignAction", "portalAreaAction", "credentialAction", "controlAction", "cavalryWorkOrderStarted"];
 	for (const name of names) {
 		console.log(`- ${name}: ${webhookUrls[name] ?? "not found"}`);
 	}
@@ -759,7 +792,7 @@ function runDoctor() {
 			allowFail: true,
 			quiet: true,
 		});
-		const webhookNames = ["templateAction", "workOrderAction", "campaignAction", "cavalryWorkOrderStarted"];
+		const webhookNames = ["templateAction", "workOrderAction", "campaignAction", "portalAreaAction", "credentialAction", "controlAction", "cavalryWorkOrderStarted"];
 		const missingWebhooks = webhookNames.filter((name) => !webhooks.stdout.includes(name));
 		printCheck("webhooks", missingWebhooks.length === 0, missingWebhooks.length === 0 ? "all present" : `Missing: ${missingWebhooks.join(", ")}`);
 		if (missingWebhooks.length > 0) issues.push("Redeploy Worker or inspect webhook list.");
@@ -771,6 +804,9 @@ function runDoctor() {
 	console.log("- Templates Action -> templateAction webhook");
 	console.log("- Work Orders Action -> workOrderAction webhook");
 	console.log("- Campaigns Action -> campaignAction webhook");
+	console.log("- Portal Areas Action -> portalAreaAction webhook");
+	console.log("- Credentials Action -> credentialAction webhook");
+	console.log("- Action Center Action -> controlAction webhook");
 
 	if (issues.length === 0) {
 		console.log("\nEverything basic looks ready.");

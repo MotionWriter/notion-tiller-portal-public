@@ -1,13 +1,14 @@
 {
   "name": "notion-tiller-portal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "bin": {
     "notion-tiller-portal": "scripts/install.mjs"
   },
   "scripts": {
-    "install:portal": "node scripts/install.mjs"
+    "install:portal": "node scripts/install.mjs",
+    "check:onboarding": "node scripts/check-onboarding.mjs"
   },
   "engines": {
     "node": ">=22.0.0",

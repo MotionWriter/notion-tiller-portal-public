@@ -1,6 +1,5 @@
-node_modules/
-dist/
-workers.json
-.env
+tiller-agent-worker/node_modules/
+tiller-agent-worker/dist/
 .DS_Store
-.notion-tiller-portal/
+*.log
+public-export/

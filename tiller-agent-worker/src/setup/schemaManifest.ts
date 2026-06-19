@@ -16,6 +16,10 @@ export type DatabaseKey =
 	| "templateDataTableIndex"
 	| "renderOutputs"
 	| "uploads"
+	| "portalAreas"
+	| "credentials"
+	| "actionCenter"
+	| "failureInbox"
 	| "config";
 
 export type Placement = "portal" | "settings" | "templateDataTables";
@@ -213,6 +217,75 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 		],
 	},
 	{
+		key: "portalAreas",
+		name: "Tiller Portal Areas",
+		placement: "settings",
+		creatorFacing: false,
+		properties: [
+			{ name: "Name", type: "title" },
+			{ name: "Parent Page URL", type: "url" },
+			{ name: "Database Prefix", type: "rich_text" },
+			{ name: "Confirm Action", type: "checkbox" },
+			{ name: "Action", type: "select", options: ["None", "Create Portal Area", "Repair Portal Area"] },
+			{ name: "Status", type: "select", options: ["Draft", "Creating", "Ready", "Needs Repair", "Failed"] },
+			{ name: "Portal Page URL", type: "url" },
+			{ name: "Settings Page URL", type: "url" },
+			{ name: "Last Result", type: "rich_text" },
+			{ name: "Last Error", type: "rich_text" },
+			{ name: "Last Synced At", type: "date" },
+		],
+	},
+	{
+		key: "credentials",
+		name: "Tiller Credentials",
+		placement: "settings",
+		creatorFacing: false,
+		properties: [
+			{ name: "Name", type: "title" },
+			{ name: "Credential Type", type: "select", options: ["Tiller Login", "Google Drive API Key", "Google Drive OAuth"] },
+			{ name: "Action", type: "select", options: ["None", "Check Status", "Show Update Command"] },
+			{ name: "Status", type: "select", options: ["Not Configured", "Connected", "Needs Update", "Failed"] },
+			{ name: "Update Command", type: "rich_text" },
+			{ name: "Last Result", type: "rich_text" },
+			{ name: "Last Error", type: "rich_text" },
+			{ name: "Last Validated At", type: "date" },
+		],
+	},
+	{
+		key: "actionCenter",
+		name: "Tiller Action Center",
+		placement: "settings",
+		creatorFacing: false,
+		properties: [
+			{ name: "Name", type: "title" },
+			{ name: "Action", type: "select", options: ["None", "Run Doctor"] },
+			{ name: "Status", type: "select", options: ["Ready", "Running", "Healthy", "Needs Attention", "Failed"] },
+			{ name: "Tiller Status", type: "select", options: ["Unknown", "Connected", "Needs Update", "Failed"] },
+			{ name: "Google Drive Status", type: "select", options: ["Unknown", "Configured", "Not Configured", "Failed"] },
+			{ name: "Worker Status", type: "select", options: ["Unknown", "Ready", "Failed"] },
+			{ name: "Notion Status", type: "select", options: ["Unknown", "Connected", "Failed"] },
+			{ name: "Last Result", type: "rich_text" },
+			{ name: "Last Error", type: "rich_text" },
+			{ name: "Last Checked At", type: "date" },
+		],
+	},
+	{
+		key: "failureInbox",
+		name: "Tiller Failure Inbox",
+		placement: "settings",
+		creatorFacing: false,
+		properties: [
+			{ name: "Name", type: "title" },
+			{ name: "Source Type", type: "select", options: ["Template", "Work Order", "Campaign", "Upload", "Render Output", "Portal Area", "Credential", "Doctor"] },
+			{ name: "Severity", type: "select", options: ["Info", "Warning", "Error"] },
+			{ name: "Status", type: "select", options: ["Open", "Resolved"] },
+			{ name: "Source Page URL", type: "url" },
+			{ name: "Last Error", type: "rich_text" },
+			{ name: "Suggested Fix", type: "rich_text" },
+			{ name: "Last Seen At", type: "date" },
+		],
+	},
+	{
 		key: "config",
 		name: "Tiller Portal Config",
 		placement: "settings",
@@ -230,9 +303,16 @@ export const DATABASE_SPECS: DatabaseSpec[] = [
 			{ name: "Template Data Table Index Data Source ID", type: "rich_text" },
 			{ name: "Render Outputs Data Source ID", type: "rich_text" },
 			{ name: "Uploads Data Source ID", type: "rich_text" },
+			{ name: "Portal Areas Data Source ID", type: "rich_text" },
+			{ name: "Credentials Data Source ID", type: "rich_text" },
+			{ name: "Action Center Data Source ID", type: "rich_text" },
+			{ name: "Failure Inbox Data Source ID", type: "rich_text" },
 			{ name: "Template Webhook URL", type: "url" },
 			{ name: "Work Order Webhook URL", type: "url" },
 			{ name: "Campaign Webhook URL", type: "url" },
+			{ name: "Portal Area Webhook URL", type: "url" },
+			{ name: "Credential Webhook URL", type: "url" },
+			{ name: "Control Webhook URL", type: "url" },
 			{ name: "Cavalry Webhook URL", type: "url" },
 			{ name: "Last Setup At", type: "date" },
 			{ name: "Last Error", type: "rich_text" },

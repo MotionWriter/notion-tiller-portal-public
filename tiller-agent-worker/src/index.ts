@@ -23,6 +23,10 @@ const DATA_SOURCE_ENV: Record<PortalDataSourceKey, string> = {
 	templateDataTableIndex: "TEMPLATE_DATA_TABLE_INDEX_DATA_SOURCE_ID",
 	renderOutputs: "RENDER_OUTPUTS_DATA_SOURCE_ID",
 	uploads: "UPLOADS_DATA_SOURCE_ID",
+	portalAreas: "PORTAL_AREAS_DATA_SOURCE_ID",
+	credentials: "CREDENTIALS_DATA_SOURCE_ID",
+	actionCenter: "ACTION_CENTER_DATA_SOURCE_ID",
+	failureInbox: "FAILURE_INBOX_DATA_SOURCE_ID",
 };
 
 const CONFIG_PROPERTY_BY_KEY: Record<PortalDataSourceKey, string> = {
@@ -32,6 +36,10 @@ const CONFIG_PROPERTY_BY_KEY: Record<PortalDataSourceKey, string> = {
 	templateDataTableIndex: "Template Data Table Index Data Source ID",
 	renderOutputs: "Render Outputs Data Source ID",
 	uploads: "Uploads Data Source ID",
+	portalAreas: "Portal Areas Data Source ID",
+	credentials: "Credentials Data Source ID",
+	actionCenter: "Action Center Data Source ID",
+	failureInbox: "Failure Inbox Data Source ID",
 };
 
 type PortalConfig = Record<PortalDataSourceKey, string> & {
@@ -51,6 +59,9 @@ worker.tool("setupWorkspace", {
 			templateAction: j.string().nullable(),
 			workOrderAction: j.string().nullable(),
 			campaignAction: j.string().nullable(),
+			portalAreaAction: j.string().nullable(),
+			credentialAction: j.string().nullable(),
+			controlAction: j.string().nullable(),
 			cavalryWorkOrderStarted: j.string().nullable(),
 		}).nullable(),
 		writeSetupChecklist: j.boolean().describe("If true, write setup checklist blocks to the parent page.").nullable(),
@@ -67,6 +78,9 @@ worker.tool("setupWorkspace", {
 						templateAction: webhookUrls.templateAction ?? undefined,
 						workOrderAction: webhookUrls.workOrderAction ?? undefined,
 						campaignAction: webhookUrls.campaignAction ?? undefined,
+						portalAreaAction: webhookUrls.portalAreaAction ?? undefined,
+						credentialAction: webhookUrls.credentialAction ?? undefined,
+						controlAction: webhookUrls.controlAction ?? undefined,
 						cavalryWorkOrderStarted: webhookUrls.cavalryWorkOrderStarted ?? undefined,
 					} : undefined,
 					writeSetupChecklist: writeSetupChecklist ?? undefined,
@@ -541,6 +555,63 @@ worker.webhook("campaignAction", {
 				await runCampaignActionFromPage({ notion, pageId });
 			} catch (error) {
 				await writePageError(notion, pageId, error);
+				throw error;
+			}
+		}
+	},
+});
+
+worker.webhook("portalAreaAction", {
+	title: "Portal Area Action",
+	description: "Create or repair a portal area from a Notion Portal Areas row.",
+	execute: async (events, { notion }) => {
+		for (const event of events) {
+			const pageId = extractWebhookPageId(event.body);
+			if (!pageId) {
+				throw new Error(`Webhook body is missing pageId. Body keys: ${Object.keys(event.body).join(", ")}`);
+			}
+			try {
+				await runPortalAreaActionFromPage({ notion, pageId });
+			} catch (error) {
+				await writePortalAreaError(notion, pageId, error);
+				throw error;
+			}
+		}
+	},
+});
+
+worker.webhook("credentialAction", {
+	title: "Credential Action",
+	description: "Check credential status and show safe update commands from a Notion Credentials row.",
+	execute: async (events, { notion }) => {
+		for (const event of events) {
+			const pageId = extractWebhookPageId(event.body);
+			if (!pageId) {
+				throw new Error(`Webhook body is missing pageId. Body keys: ${Object.keys(event.body).join(", ")}`);
+			}
+			try {
+				await runCredentialActionFromPage({ notion, pageId });
+			} catch (error) {
+				await writeCredentialError(notion, pageId, error);
+				throw error;
+			}
+		}
+	},
+});
+
+worker.webhook("controlAction", {
+	title: "Control Action",
+	description: "Run portal doctor checks from a Notion Action Center row.",
+	execute: async (events, { notion }) => {
+		for (const event of events) {
+			const pageId = extractWebhookPageId(event.body);
+			if (!pageId) {
+				throw new Error(`Webhook body is missing pageId. Body keys: ${Object.keys(event.body).join(", ")}`);
+			}
+			try {
+				await runControlActionFromPage({ notion, pageId });
+			} catch (error) {
+				await writeControlError(notion, pageId, error);
 				throw error;
 			}
 		}
@@ -1374,6 +1445,346 @@ async function runCampaignActionFromPage({
 	throw new Error(`Unsupported Campaign action: ${summary.action || "None"}.`);
 }
 
+async function runPortalAreaActionFromPage({
+	notion,
+	pageId,
+}: {
+	notion: any;
+	pageId: string;
+}) {
+	await assertPageInDataSource(notion, pageId, "portalAreas");
+	const page = await notion.pages.retrieve({ page_id: pageId });
+	const summary = summarizePortalAreaPage(page);
+	if (!summary.action || summary.action === "None") {
+		return { ok: true, pageId, ignored: true, reason: "No portal area action selected." };
+	}
+	if (summary.action !== "Create Portal Area" && summary.action !== "Repair Portal Area") {
+		throw new Error(`Unsupported Portal Area action: ${summary.action}.`);
+	}
+	if (!summary.confirmAction) {
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Failed" } },
+				"Last Error": richTextValue("Check Confirm Action before creating or repairing a portal area."),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		throw new Error("Confirm Action is required before creating or repairing a portal area.");
+	}
+	if (!summary.parentPageUrl) {
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Failed" } },
+				"Last Error": richTextValue("Parent Page URL is required before creating a portal area."),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		throw new Error("Parent Page URL is required before creating a portal area.");
+	}
+
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Status: { select: { name: "Creating" } },
+			"Last Result": richTextValue("Creating or repairing portal area..."),
+			"Last Error": richTextValue(""),
+			"Last Synced At": { date: { start: new Date().toISOString() } },
+		},
+	});
+
+	try {
+		const result = await setupWorkspace({
+			notion,
+			input: {
+				parentPageId: summary.parentPageUrl,
+				portalName: summary.name || undefined,
+				databasePrefix: summary.databasePrefix || undefined,
+				writeSetupChecklist: false,
+				mode: "create_or_repair",
+				dryRun: false,
+			},
+		});
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Ready" } },
+				"Portal Page URL": { url: notionPageUrl(result.portalPageId) },
+				"Settings Page URL": { url: notionPageUrl(result.settingsPageId) },
+				"Last Result": richTextValue(`Portal area ready. Created ${result.created.length}, repaired ${result.repaired.length}.`),
+				"Last Error": richTextValue(""),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		return {
+			ok: true,
+			pageId,
+			portalPageId: result.portalPageId,
+			settingsPageId: result.settingsPageId,
+			created: result.created.length,
+			repaired: result.repaired.length,
+		};
+	} catch (error) {
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Failed" } },
+				"Last Result": richTextValue("Portal area setup failed. Fix the error and run the action again."),
+				"Last Error": richTextValue(errorDetail(error)),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		throw error;
+	}
+}
+
+async function runCredentialActionFromPage({
+	notion,
+	pageId,
+}: {
+	notion: any;
+	pageId: string;
+}) {
+	await assertPageInDataSource(notion, pageId, "credentials");
+	const page = await notion.pages.retrieve({ page_id: pageId });
+	const summary = summarizeCredentialPage(page);
+	if (!summary.action || summary.action === "None") {
+		return { ok: true, pageId, ignored: true, reason: "No credential action selected." };
+	}
+	if (summary.action !== "Check Status" && summary.action !== "Show Update Command") {
+		throw new Error(`Unsupported Credential action: ${summary.action}.`);
+	}
+	const result = await checkCredentialStatus(summary.credentialType);
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Action: { select: { name: "None" } },
+			Status: { select: { name: result.status } },
+			"Update Command": richTextValue(result.command),
+			"Last Result": richTextValue(result.message),
+			"Last Error": richTextValue(result.error ?? ""),
+			"Last Validated At": { date: { start: new Date().toISOString() } },
+		},
+	});
+	if (result.status === "Failed" || result.status === "Needs Update") {
+		await recordFailure(notion, {
+			name: `${summary.credentialType || "Credential"} needs attention`,
+			sourceType: "Credential",
+			severity: result.status === "Failed" ? "Error" : "Warning",
+			sourcePageUrl: summary.url,
+			lastError: result.error || result.message,
+			suggestedFix: `Run ${result.command}`,
+		});
+	}
+	return { ok: result.status === "Connected", pageId, status: result.status, message: result.message };
+}
+
+async function checkCredentialStatus(credentialType: string) {
+	const type = credentialType || "Tiller Login";
+	if (type === "Tiller Login") {
+		const command = CLI_CREDENTIALS_COMMAND;
+		if (!process.env.TILLER_EMAIL || !process.env.TILLER_PASSWORD) {
+			return {
+				status: "Needs Update",
+				command,
+				message: "Tiller email/password are not configured on the Worker.",
+				error: `Run ${command} to set Tiller email/password.`,
+			};
+		}
+		try {
+			const client = new TillerClient();
+			await client.authenticate();
+			return {
+				status: "Connected",
+				command,
+				message: "Tiller login is connected.",
+			};
+		} catch (error) {
+			return {
+				status: "Failed",
+				command,
+				message: "Tiller rejected the current Worker credentials.",
+				error: formatUserFacingError(error),
+			};
+		}
+	}
+
+	if (type === "Google Drive API Key") {
+		const command = CLI_GOOGLE_DRIVE_COMMAND;
+		if (!process.env.GOOGLE_DRIVE_API_KEY?.trim()) {
+			return {
+				status: "Needs Update",
+				command,
+				message: "Google Drive API key is not configured. Public Drive folder links may fail.",
+				error: `Run ${command} to set a Google Drive API key.`,
+			};
+		}
+		return {
+			status: "Connected",
+			command,
+			message: "Google Drive API key is configured. Folder-specific access is checked when assets are read.",
+		};
+	}
+
+	if (type === "Google Drive OAuth") {
+		const command = CLI_GOOGLE_DRIVE_COMMAND;
+		const hasOAuth =
+			process.env.GOOGLE_DRIVE_CLIENT_ID?.trim() &&
+			process.env.GOOGLE_DRIVE_CLIENT_SECRET?.trim() &&
+			process.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim();
+		if (!hasOAuth) {
+			return {
+				status: "Needs Update",
+				command,
+				message: "Google Drive OAuth is not configured. Private folders and Drive output uploads may fail.",
+				error: `Run ${command} to set Google Drive OAuth credentials.`,
+			};
+		}
+		try {
+			await getGoogleDriveAccessToken();
+			return {
+				status: "Connected",
+				command,
+				message: "Google Drive OAuth refresh token works.",
+			};
+		} catch (error) {
+			return {
+				status: "Failed",
+				command,
+				message: "Google Drive OAuth refresh failed.",
+				error: formatUserFacingError(error),
+			};
+		}
+	}
+
+	return {
+		status: "Failed",
+		command: CLI_CREDENTIALS_COMMAND,
+		message: `Unknown credential type: ${type}.`,
+		error: "Choose Tiller Login, Google Drive API Key, or Google Drive OAuth.",
+	};
+}
+
+async function runControlActionFromPage({
+	notion,
+	pageId,
+}: {
+	notion: any;
+	pageId: string;
+}) {
+	await assertPageInDataSource(notion, pageId, "actionCenter");
+	const page = await notion.pages.retrieve({ page_id: pageId });
+	const summary = summarizeControlPage(page);
+	if (!summary.action || summary.action === "None") {
+		return { ok: true, pageId, ignored: true, reason: "No control action selected." };
+	}
+	if (summary.action !== "Run Doctor") {
+		throw new Error(`Unsupported Control action: ${summary.action}.`);
+	}
+
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Status: { select: { name: "Running" } },
+			"Last Result": richTextValue("Running portal doctor checks..."),
+			"Last Error": richTextValue(""),
+			"Last Checked At": { date: { start: new Date().toISOString() } },
+		},
+	});
+
+	const result = await runNotionDoctor(notion, summary.url);
+	await notion.pages.update({
+		page_id: pageId,
+		properties: {
+			Action: { select: { name: "None" } },
+			Status: { select: { name: result.ok ? "Healthy" : "Needs Attention" } },
+			"Tiller Status": { select: { name: result.tiller } },
+			"Google Drive Status": { select: { name: result.googleDrive } },
+			"Worker Status": { select: { name: result.worker } },
+			"Notion Status": { select: { name: result.notion } },
+			"Last Result": richTextValue(result.message),
+			"Last Error": richTextValue(result.errors.join("\n")),
+			"Last Checked At": { date: { start: new Date().toISOString() } },
+		},
+	});
+	return result;
+}
+
+async function runNotionDoctor(notion: any, sourcePageUrl: string) {
+	const errors: string[] = [];
+	let notionStatus = "Connected";
+	let workerStatus = "Ready";
+	let tillerStatus = "Unknown";
+	let googleDriveStatus = "Unknown";
+
+	try {
+		await getDataSourceId(notion, "templates");
+		await getDataSourceId(notion, "workOrders");
+		await getDataSourceId(notion, "campaigns");
+		await getDataSourceId(notion, "renderOutputs");
+		await getDataSourceId(notion, "credentials");
+	} catch (error) {
+		notionStatus = "Failed";
+		workerStatus = "Failed";
+		errors.push(formatUserFacingError(error));
+	}
+
+	const tiller = await checkCredentialStatus("Tiller Login");
+	tillerStatus = tiller.status === "Connected" ? "Connected" : tiller.status === "Needs Update" ? "Needs Update" : "Failed";
+	if (tiller.status !== "Connected") {
+		errors.push(tiller.error ?? tiller.message);
+		await recordFailure(notion, {
+			name: "Tiller login needs attention",
+			sourceType: "Doctor",
+			severity: "Error",
+			sourcePageUrl,
+			lastError: tiller.error ?? tiller.message,
+			suggestedFix: `Run ${tiller.command}`,
+		});
+	}
+
+	const hasDriveApiKey = !!process.env.GOOGLE_DRIVE_API_KEY?.trim();
+	const hasDriveOAuth =
+		process.env.GOOGLE_DRIVE_CLIENT_ID?.trim() &&
+		process.env.GOOGLE_DRIVE_CLIENT_SECRET?.trim() &&
+		process.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim();
+	if (!hasDriveApiKey && !hasDriveOAuth) {
+		googleDriveStatus = "Not Configured";
+	} else if (hasDriveOAuth) {
+		const drive = await checkCredentialStatus("Google Drive OAuth");
+		googleDriveStatus = drive.status === "Connected" ? "Configured" : "Failed";
+		if (drive.status === "Failed") {
+			errors.push(drive.error ?? drive.message);
+			await recordFailure(notion, {
+				name: "Google Drive OAuth needs attention",
+				sourceType: "Doctor",
+				severity: "Warning",
+				sourcePageUrl,
+				lastError: drive.error ?? drive.message,
+				suggestedFix: `Run ${drive.command}`,
+			});
+		}
+	} else {
+		googleDriveStatus = "Configured";
+	}
+
+	const ok = errors.length === 0;
+	return {
+		ok,
+		notion: notionStatus,
+		worker: workerStatus,
+		tiller: tillerStatus,
+		googleDrive: googleDriveStatus,
+		message: ok ? "Portal doctor passed. Core setup looks healthy." : `Portal doctor found ${errors.length} issue${errors.length === 1 ? "" : "s"}. Open Failure Inbox for fixes.`,
+		errors,
+	};
+}
+
 function extractWebhookPageId(body: Record<string, unknown>) {
 	const directKeys = ["pageId", "page_id", "pageID", "notionPageId"];
 	for (const key of directKeys) {
@@ -1698,6 +2109,10 @@ function displayDataSourceKey(key: PortalDataSourceKey) {
 		templateDataTableIndex: "Template Data Table Index",
 		renderOutputs: "Render Outputs",
 		uploads: "Uploads",
+		portalAreas: "Portal Areas",
+		credentials: "Credentials",
+		actionCenter: "Action Center",
+		failureInbox: "Failure Inbox",
 	}[key];
 }
 
@@ -1815,6 +2230,11 @@ function safeJsonString(value: unknown) {
 	}
 }
 
+function notionPageUrl(id: string) {
+	if (!id) return "";
+	return `https://www.notion.so/${id.replace(/-/g, "")}`;
+}
+
 function summarizeNotionWorkOrderPage(page: unknown) {
 	const value = page as {
 		id?: string;
@@ -1878,6 +2298,55 @@ function summarizeNotionCampaignPage(page: unknown) {
 		action: getSelectProperty(properties.Action),
 		templatePageIds: getRelationProperty(properties.Template),
 		workOrderPageIds: getRelationProperty(properties["Work Order"]),
+	};
+}
+
+function summarizePortalAreaPage(page: unknown) {
+	const value = page as {
+		id?: string;
+		url?: string;
+		properties?: Record<string, unknown>;
+	};
+	const properties = value.properties ?? {};
+	return {
+		pageId: value.id ?? "",
+		url: value.url ?? "",
+		name: getTitleProperty(properties.Name),
+		action: getSelectProperty(properties.Action),
+		parentPageUrl: getUrlProperty(properties["Parent Page URL"]),
+		databasePrefix: getRichTextProperty(properties["Database Prefix"]),
+		confirmAction: getCheckboxProperty(properties["Confirm Action"]),
+	};
+}
+
+function summarizeCredentialPage(page: unknown) {
+	const value = page as {
+		id?: string;
+		url?: string;
+		properties?: Record<string, unknown>;
+	};
+	const properties = value.properties ?? {};
+	return {
+		pageId: value.id ?? "",
+		url: value.url ?? "",
+		name: getTitleProperty(properties.Name),
+		action: getSelectProperty(properties.Action),
+		credentialType: getSelectProperty(properties["Credential Type"]),
+	};
+}
+
+function summarizeControlPage(page: unknown) {
+	const value = page as {
+		id?: string;
+		url?: string;
+		properties?: Record<string, unknown>;
+	};
+	const properties = value.properties ?? {};
+	return {
+		pageId: value.id ?? "",
+		url: value.url ?? "",
+		name: getTitleProperty(properties.Name),
+		action: getSelectProperty(properties.Action),
 	};
 }
 
@@ -2133,7 +2602,6 @@ async function upsertTemplates({
 				Name: titleValue(template.name),
 				"Tiller Template ID": { number: template.id },
 				Status: { select: { name: ensureTemplateStatus(template.status) } },
-				"Created At": dateOrNull(template.created),
 				"Last Synced At": { date: { start: new Date().toISOString() } },
 			};
 			if (existing) {
@@ -4509,9 +4977,155 @@ async function writePageError(
 				"Last Error": richTextValue(message),
 			},
 		});
+		await recordFailureForPage(notion, pageId, message);
 	} catch {
 		// Preserve original failure for tool output.
 	}
+}
+
+async function writePortalAreaError(
+	notion: any,
+	pageId: string,
+	error: unknown,
+) {
+	const message = formatUserFacingError(error);
+	try {
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Failed" } },
+				"Last Result": richTextValue("Portal area action failed. Fix the error and run the action again."),
+				"Last Error": richTextValue(message),
+				"Last Synced At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		await recordFailureForPage(notion, pageId, message);
+	} catch {
+		// Preserve original failure for webhook output.
+	}
+}
+
+async function writeCredentialError(
+	notion: any,
+	pageId: string,
+	error: unknown,
+) {
+	const message = formatUserFacingError(error);
+	try {
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Failed" } },
+				"Last Result": richTextValue("Credential check failed. No secrets were stored in Notion."),
+				"Last Error": richTextValue(message),
+				"Last Validated At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		await recordFailureForPage(notion, pageId, message);
+	} catch {
+		// Preserve original failure for webhook output.
+	}
+}
+
+async function writeControlError(
+	notion: any,
+	pageId: string,
+	error: unknown,
+) {
+	const message = formatUserFacingError(error);
+	try {
+		await notion.pages.update({
+			page_id: pageId,
+			properties: {
+				Action: { select: { name: "None" } },
+				Status: { select: { name: "Failed" } },
+				"Last Result": richTextValue("Doctor check failed."),
+				"Last Error": richTextValue(message),
+				"Last Checked At": { date: { start: new Date().toISOString() } },
+			},
+		});
+		await recordFailureForPage(notion, pageId, message);
+	} catch {
+		// Preserve original failure for webhook output.
+	}
+}
+
+async function recordFailure(
+	notion: any,
+	input: {
+		name: string;
+		sourceType: string;
+		severity: string;
+		sourcePageUrl?: string;
+		lastError: string;
+		suggestedFix: string;
+	},
+) {
+	try {
+		const dataSourceId = await getDataSourceId(notion, "failureInbox");
+		await notion.pages.create({
+			parent: { type: "data_source_id", data_source_id: dataSourceId },
+			properties: {
+				Name: titleValue(input.name),
+				"Source Type": { select: { name: input.sourceType } },
+				Severity: { select: { name: input.severity } },
+				Status: { select: { name: "Open" } },
+				...(input.sourcePageUrl ? { "Source Page URL": { url: input.sourcePageUrl } } : {}),
+				"Last Error": richTextValue(input.lastError),
+				"Suggested Fix": richTextValue(input.suggestedFix),
+				"Last Seen At": { date: { start: new Date().toISOString() } },
+			},
+		});
+	} catch {
+		// Failure Inbox is best-effort. Never hide original action result.
+	}
+}
+
+async function recordFailureForPage(notion: any, pageId: string, message: string) {
+	try {
+		const page = await notion.pages.retrieve({ page_id: pageId });
+		const sourceType = await sourceTypeForPage(notion, page);
+		await recordFailure(notion, {
+			name: `${sourceType} action failed`,
+			sourceType,
+			severity: "Error",
+			sourcePageUrl: (page as { url?: string }).url,
+			lastError: message,
+			suggestedFix: suggestedFixForError(message),
+		});
+	} catch {
+		// Failure Inbox is best-effort.
+	}
+}
+
+async function sourceTypeForPage(notion: any, page: unknown) {
+	const actualParent = getPageParentId(page);
+	const candidates: Array<[PortalDataSourceKey, string]> = [
+		["templates", "Template"],
+		["workOrders", "Work Order"],
+		["campaigns", "Campaign"],
+		["uploads", "Upload"],
+		["renderOutputs", "Render Output"],
+		["portalAreas", "Portal Area"],
+		["credentials", "Credential"],
+	];
+	for (const [key, label] of candidates) {
+		try {
+			if (actualParent === await getDataSourceId(notion, key)) return label;
+		} catch {
+			// Keep trying other configured sources.
+		}
+	}
+	return "Doctor";
+}
+
+function suggestedFixForError(message: string) {
+	if (/TILLER_|Tiller/i.test(message)) return `Run ${CLI_CREDENTIALS_COMMAND}`;
+	if (/Google Drive|GOOGLE_DRIVE/i.test(message)) return `Run ${CLI_GOOGLE_DRIVE_COMMAND}`;
+	if (/missing|upload|file/i.test(message)) return "Open the related row and check required uploads or file links.";
+	return "Open the source row, review Last Error, then rerun the Action.";
 }
 
 function formatUserFacingError(error: unknown) {

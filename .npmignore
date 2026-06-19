@@ -5,6 +5,10 @@
 node_modules/
 tiller-agent-worker/node_modules/
 tiller-agent-worker/dist/
+tiller-agent-worker/.agents/
+tiller-agent-worker/.claude/
+tiller-agent-worker/.examples/
+tiller-agent-worker/docs/
 workers.json
 .env
 .notion-tiller-portal/

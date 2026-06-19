@@ -12,7 +12,7 @@ type SetupWorkspaceInput = {
 	parentPageId: string;
 	portalName?: string;
 	databasePrefix?: string;
-	webhookUrls?: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted", string>>;
+	webhookUrls?: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted" | "portalAreaAction" | "credentialAction" | "controlAction", string>>;
 	writeSetupChecklist?: boolean | null;
 	mode?: "create_or_repair";
 	dryRun?: boolean | null;
@@ -162,6 +162,52 @@ const STARTER_VIEWS: StarterViewSpec[] = [
 		visibleProperties: ["Name", "Phase", "Tiller Path", "Ready", "Uploaded At", "Parent Template", "Parent Work Order", "Last Error"],
 	},
 	{
+		key: "credentials",
+		name: "Credential Status",
+		type: "table",
+		sorts: [{ property: "Last Validated At", direction: "descending" }],
+		visibleProperties: ["Name", "Credential Type", "Action", "Status", "Update Command", "Last Result", "Last Error", "Last Validated At"],
+	},
+	{
+		key: "actionCenter",
+		name: "Doctor",
+		type: "table",
+		sorts: [{ property: "Last Checked At", direction: "descending" }],
+		visibleProperties: ["Name", "Action", "Status", "Tiller Status", "Google Drive Status", "Worker Status", "Notion Status", "Last Result", "Last Error", "Last Checked At"],
+	},
+	{
+		key: "failureInbox",
+		name: "Open Failures",
+		type: "table",
+		filter: { property: "Status", select: { equals: "Open" } },
+		sorts: [{ property: "Last Seen At", direction: "descending" }],
+		visibleProperties: ["Name", "Source Type", "Severity", "Status", "Source Page URL", "Last Error", "Suggested Fix", "Last Seen At"],
+	},
+	{
+		key: "failureInbox",
+		name: "Resolved Failures",
+		type: "table",
+		filter: { property: "Status", select: { equals: "Resolved" } },
+		sorts: [{ property: "Last Seen At", direction: "descending" }],
+		visibleProperties: ["Name", "Source Type", "Severity", "Status", "Source Page URL", "Last Error", "Suggested Fix", "Last Seen At"],
+	},
+	{
+		key: "portalAreas",
+		name: "Ready Portal Areas",
+		type: "table",
+		filter: { property: "Status", select: { equals: "Ready" } },
+		sorts: [{ property: "Last Synced At", direction: "descending" }],
+		visibleProperties: ["Name", "Status", "Parent Page URL", "Confirm Action", "Action", "Portal Page URL", "Settings Page URL", "Last Result", "Last Synced At"],
+	},
+	{
+		key: "portalAreas",
+		name: "Needs Attention",
+		type: "table",
+		filter: { property: "Status", select: { does_not_equal: "Ready" } },
+		sorts: [{ property: "Last Synced At", direction: "descending" }],
+		visibleProperties: ["Name", "Parent Page URL", "Database Prefix", "Confirm Action", "Action", "Status", "Last Result", "Last Error"],
+	},
+	{
 		key: "templateDataTableIndex",
 		name: "All Template Data Tables",
 		type: "table",
@@ -287,6 +333,7 @@ export async function setupWorkspace({
 		refs,
 		webhookUrls: input.webhookUrls ?? {},
 	});
+	await seedControlRows(notion, refs, created);
 	await appendHowToUsePage(notion, howToUsePageId);
 	await appendPortalNavigation(notion, portalPageId, howToUsePageId, settingsPageId, templateDataTablesPageId, refs);
 	await appendSetupInstructions(notion, settingsPageId, refs);
@@ -679,7 +726,7 @@ async function upsertConfigRow({
 	templateDataTablesPageId: string;
 	configDataSourceId: string;
 	refs: Partial<Record<DatabaseKey, DataSourceRef>>;
-	webhookUrls: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted", string>>;
+	webhookUrls: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted" | "portalAreaAction" | "credentialAction" | "controlAction", string>>;
 }) {
 	if (!configDataSourceId) return;
 	const existing = await notion.dataSources.query({
@@ -703,9 +750,16 @@ async function upsertConfigRow({
 		"Template Data Table Index Data Source ID": richTextValue(refs.templateDataTableIndex?.dataSourceId ?? ""),
 		"Render Outputs Data Source ID": richTextValue(refs.renderOutputs?.dataSourceId ?? ""),
 		"Uploads Data Source ID": richTextValue(refs.uploads?.dataSourceId ?? ""),
+		"Portal Areas Data Source ID": richTextValue(refs.portalAreas?.dataSourceId ?? ""),
+		"Credentials Data Source ID": richTextValue(refs.credentials?.dataSourceId ?? ""),
+		"Action Center Data Source ID": richTextValue(refs.actionCenter?.dataSourceId ?? ""),
+		"Failure Inbox Data Source ID": richTextValue(refs.failureInbox?.dataSourceId ?? ""),
 		...(webhookUrls.templateAction ? { "Template Webhook URL": { url: webhookUrls.templateAction } } : {}),
 		...(webhookUrls.workOrderAction ? { "Work Order Webhook URL": { url: webhookUrls.workOrderAction } } : {}),
 		...(webhookUrls.campaignAction ? { "Campaign Webhook URL": { url: webhookUrls.campaignAction } } : {}),
+		...(webhookUrls.portalAreaAction ? { "Portal Area Webhook URL": { url: webhookUrls.portalAreaAction } } : {}),
+		...(webhookUrls.credentialAction ? { "Credential Webhook URL": { url: webhookUrls.credentialAction } } : {}),
+		...(webhookUrls.controlAction ? { "Control Webhook URL": { url: webhookUrls.controlAction } } : {}),
 		...(webhookUrls.cavalryWorkOrderStarted ? { "Cavalry Webhook URL": { url: webhookUrls.cavalryWorkOrderStarted } } : {}),
 		"Last Setup At": { date: { start: new Date().toISOString() } },
 		"Last Error": richTextValue(""),
@@ -718,6 +772,75 @@ async function upsertConfigRow({
 		parent: { type: "data_source_id", data_source_id: configDataSourceId },
 		properties,
 	});
+}
+
+async function seedControlRows(
+	notion: any,
+	refs: Partial<Record<DatabaseKey, DataSourceRef>>,
+	created: string[],
+) {
+	const seeded: string[] = [];
+	if (await ensureDataSourceRow(notion, refs.credentials?.dataSourceId, "Tiller Login", {
+		"Credential Type": { select: { name: "Tiller Login" } },
+		Action: { select: { name: "None" } },
+		Status: { select: { name: "Not Configured" } },
+		"Update Command": richTextValue(`${CLI_COMMAND_MAC_LINUX} credentials`),
+		"Last Result": richTextValue("Use Action -> Check Status after setup. Use the update command to change stored Worker credentials."),
+	})) seeded.push("row:credentials:Tiller Login");
+	if (await ensureDataSourceRow(notion, refs.credentials?.dataSourceId, "Google Drive API Key", {
+		"Credential Type": { select: { name: "Google Drive API Key" } },
+		Action: { select: { name: "None" } },
+		Status: { select: { name: "Not Configured" } },
+		"Update Command": richTextValue(`${CLI_COMMAND_MAC_LINUX} google-drive`),
+		"Last Result": richTextValue("Optional. Needed for public Google Drive asset folder links."),
+	})) seeded.push("row:credentials:Google Drive API Key");
+	if (await ensureDataSourceRow(notion, refs.credentials?.dataSourceId, "Google Drive OAuth", {
+		"Credential Type": { select: { name: "Google Drive OAuth" } },
+		Action: { select: { name: "None" } },
+		Status: { select: { name: "Not Configured" } },
+		"Update Command": richTextValue(`${CLI_COMMAND_MAC_LINUX} google-drive`),
+		"Last Result": richTextValue("Optional. Needed for private Drive folders or Drive output uploads."),
+	})) seeded.push("row:credentials:Google Drive OAuth");
+	if (await ensureDataSourceRow(notion, refs.actionCenter?.dataSourceId, "Portal Doctor", {
+		Action: { select: { name: "None" } },
+		Status: { select: { name: "Ready" } },
+		"Tiller Status": { select: { name: "Unknown" } },
+		"Google Drive Status": { select: { name: "Unknown" } },
+		"Worker Status": { select: { name: "Unknown" } },
+		"Notion Status": { select: { name: "Unknown" } },
+		"Last Result": richTextValue("Set Action to Run Doctor to check portal health."),
+	})) seeded.push("row:actionCenter:Portal Doctor");
+	created.push(...seeded);
+}
+
+async function ensureDataSourceRow(
+	notion: any,
+	dataSourceId: string | undefined,
+	name: string,
+	properties: Record<string, unknown>,
+): Promise<boolean> {
+	if (!dataSourceId) return false;
+	const existing = await notion.dataSources.query({
+		data_source_id: dataSourceId,
+		page_size: 1,
+		filter: {
+			property: "Name",
+			title: { equals: name },
+		},
+	});
+	const values = {
+		Name: titleValue(name),
+		...properties,
+	};
+	if (existing.results?.[0]?.id) {
+		await notion.pages.update({ page_id: existing.results[0].id, properties: values });
+		return false;
+	}
+	await notion.pages.create({
+		parent: { type: "data_source_id", data_source_id: dataSourceId },
+		properties: values,
+	});
+	return true;
 }
 
 async function appendHowToUsePage(notion: any, howToUsePageId: string) {
@@ -762,6 +885,7 @@ async function appendHowToUsePage(notion: any, howToUsePageId: string) {
 			paragraphBlock("Optional: to also copy finished renders into Google Drive, run the google-drive command, add OAuth credentials with scope https://www.googleapis.com/auth/drive.file, then paste the target folder URL into the Work Order field Download Renders Here."),
 			paragraphBlock("If Google Drive output upload fails, Notion Render Outputs are still created and the Render Output Last Error explains what to fix."),
 			headingBlock("Fix credentials"),
+			paragraphBlock("Use the Credentials database to check connection status or show the exact update command. Secrets are not stored in Notion."),
 			paragraphBlock("If Tiller login fails, run this in Terminal:"),
 			...cliCommandBlocks("credentials"),
 			paragraphBlock("If Google Drive asset links or output uploads fail, run this in Terminal:"),
@@ -825,6 +949,10 @@ async function appendPortalNavigation(
 				linkedParagraphBlock("Render Outputs", refs.renderOutputs?.url),
 			]),
 			calloutBlock("Settings", "red_background", [
+				linkedParagraphBlock("Portal Areas", refs.portalAreas?.url),
+				linkedParagraphBlock("Credentials", refs.credentials?.url),
+				linkedParagraphBlock("Action Center", refs.actionCenter?.url),
+				linkedParagraphBlock("Failure Inbox", refs.failureInbox?.url),
 				linkedParagraphBlock("Settings", notionPageUrl(settingsPageId)),
 			]),
 		],
@@ -845,6 +973,7 @@ async function appendSetupInstructions(
 				paragraphBlock("Tiller and Notion secrets are stored on the Worker. Do not store passwords in Notion database fields."),
 				paragraphBlock("To update Tiller login or other credentials later, run this in Terminal:"),
 				...cliCommandBlocks("credentials"),
+				paragraphBlock("To create or repair additional portal areas after first install, open Portal Areas and set Action to Create Portal Area or Repair Portal Area."),
 				paragraphBlock("To update Google Drive public folder links, private folders, or output uploads, run this in Terminal:"),
 				...cliCommandBlocks("google-drive"),
 				paragraphBlock("Google links: create keys at https://console.cloud.google.com/apis/credentials, enable Drive API at https://console.cloud.google.com/apis/library/drive.googleapis.com, check scopes at https://developers.google.com/workspace/drive/api/guides/api-specific-auth, and use OAuth Playground at https://developers.google.com/oauthplayground when creating refresh tokens."),
@@ -886,6 +1015,9 @@ Walk me step by step through Google Cloud Console and OAuth Playground.`),
 				paragraphBlock("Templates database: when Action is set to Add to Tiller, Push Update, Check Status, or Create Data Table, send webhook to templateAction."),
 				paragraphBlock("Work Orders database: when Action is set to Submit to Tiller, Check Status, or Download Results, send webhook to workOrderAction."),
 				paragraphBlock("Campaigns database: when Action is set to Validate, Build CSV, or Submit Render, send webhook to campaignAction."),
+				paragraphBlock("Portal Areas database: check Confirm Action, then set Action to Create Portal Area or Repair Portal Area, and send webhook to portalAreaAction."),
+				paragraphBlock("Credentials database: when Action is set to Check Status or Show Update Command, send webhook to credentialAction."),
+				paragraphBlock("Action Center database: when Action is set to Run Doctor, send webhook to controlAction."),
 				paragraphBlock("For each Send webhook action: paste the matching webhook URL, leave custom headers empty, and check Select all existing properties under Content."),
 				paragraphBlock("The Worker reads the page ID from Notion's payload and loads the full page through the Notion API. You do not need to build custom JSON."),
 				paragraphBlock("Use cavalryWorkOrderStarted as the destination URL for Cavalry scripts."),
@@ -909,7 +1041,7 @@ Walk me step by step through Google Cloud Console and OAuth Playground.`),
 async function appendWebhookUrlInstructions(
 	notion: any,
 	settingsPageId: string,
-	webhookUrls: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted", string>>,
+	webhookUrls: Partial<Record<"templateAction" | "workOrderAction" | "campaignAction" | "cavalryWorkOrderStarted" | "portalAreaAction" | "credentialAction" | "controlAction", string>>,
 ) {
 	if (Object.keys(webhookUrls).length === 0) return;
 	const existing = await findChildByTitle(notion, settingsPageId, "Webhook URLs", "heading_2");
@@ -923,6 +1055,9 @@ async function appendWebhookUrlInstructions(
 			...webhookUrlBlocks("Template Action", "Use this in the Templates database automation.", webhookUrls.templateAction),
 			...webhookUrlBlocks("Work Order Action", "Use this in the Work Orders database automation.", webhookUrls.workOrderAction),
 			...webhookUrlBlocks("Campaign Action", "Use this in the Campaigns database automation.", webhookUrls.campaignAction),
+			...webhookUrlBlocks("Portal Area Action", "Use this in the Portal Areas database automation.", webhookUrls.portalAreaAction),
+			...webhookUrlBlocks("Credential Action", "Use this in the Credentials database automation.", webhookUrls.credentialAction),
+			...webhookUrlBlocks("Control Action", "Use this in the Action Center database automation.", webhookUrls.controlAction),
 			...webhookUrlBlocks("Cavalry Work Order Started", "Use this as the destination URL from Cavalry scripts.", webhookUrls.cavalryWorkOrderStarted),
 		],
 	});
@@ -976,7 +1111,7 @@ async function appendSetupChecklist(
 			toDoBlock("Create portal databases and focused views", true),
 			toDoBlock("Save Worker secrets", true),
 			toDoBlock("Store webhook URLs in Settings", storedWebhookUrls),
-			toDoBlock("Create Notion automations for Templates, Work Orders, and Campaigns", false),
+			toDoBlock("Create Notion automations for Templates, Work Orders, Campaigns, Portal Areas, Credentials, and Action Center", false),
 			toDoBlock("Run the doctor command from Settings", false),
 			toDoBlock("Use Add New Template, Start Work Order, or Ready - Submit Render for daily input", false),
 		],
@@ -989,7 +1124,7 @@ function nextSteps(configDataSourceId: string) {
 		"Set TILLER_EMAIL and TILLER_PASSWORD as Worker env vars.",
 		`Run webhook list command. macOS/Linux: ${WEBHOOKS_COMMAND_MAC_LINUX}`,
 		`Run webhook list command. Windows PowerShell: ${WEBHOOKS_COMMAND_WINDOWS}`,
-		"Add Notion database automations for templateAction, workOrderAction, and campaignAction.",
+		"Add Notion database automations for templateAction, workOrderAction, campaignAction, portalAreaAction, credentialAction, and controlAction.",
 		"Use cavalryWorkOrderStarted as the Cavalry destination when needed.",
 	];
 }

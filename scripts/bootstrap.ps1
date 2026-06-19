@@ -203,6 +203,7 @@ function Resolve-NodeRequirement($Reason) {
 }
 
 Write-Host "Notion Tiller Portal bootstrap"
+Write-Host "source: $Package"
 Write-Host ""
 Write-Host "This gets your terminal ready, then starts the guided installer."
 Write-Host "Daily render work happens in Notion after setup."

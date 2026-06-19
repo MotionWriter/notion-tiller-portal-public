@@ -14,6 +14,7 @@ PACKAGE="github:MotionWriter/notion-tiller-portal-public#main"
 NTN_INSTALL_DIR="${NTN_INSTALL_DIR:-$HOME/.local/bin}"
 
 echo "Notion Tiller Portal bootstrap"
+echo "source: $PACKAGE"
 echo
 echo "This gets your terminal ready, then starts the guided installer."
 echo "Daily render work happens in Notion after setup."
