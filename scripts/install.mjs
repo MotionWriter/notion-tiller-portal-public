@@ -175,6 +175,7 @@ async function resumeFromWorkerEnv(state, workersConfig) {
 	}
 	rl.close();
 
+	await refreshExistingWorker(workersConfig);
 	await ensureTillerAuth(workersConfig);
 	await finishInstall({ parentPageId, workerId: state.workerId, workersConfig, portalName, databasePrefix });
 }
@@ -823,6 +824,18 @@ function runWebhooks() {
 		throw new Error(`workers.json not found at ${workersConfig}. Run installer first.`);
 	}
 	run("ntn", ["workers", "webhooks", "list", "--workers-config-file", workersConfig], { cwd: workerDir });
+}
+
+async function refreshExistingWorker(workersConfig) {
+	const savedWorkersConfig = readFileSync(workersConfig, "utf8");
+	await prepareWorkerDir();
+	writeFileSync(workersConfig, savedWorkersConfig);
+	await runWithSpinner("npm", ["install"], { cwd: workerDir, message: "Updating Worker dependencies" });
+	await runWithSpinner("npm", ["run", "build"], { cwd: workerDir, message: "Building updated Worker" });
+	await runWithSpinner("ntn", ["workers", "deploy", "--no-git"], {
+		cwd: workerDir,
+		message: "Updating Notion Worker",
+	});
 }
 
 function prepareWorkerDir() {
